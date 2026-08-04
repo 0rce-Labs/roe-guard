@@ -43,9 +43,9 @@ dev = [
 roe-guard = "roe_guard.cli:main"
 
 [project.urls]
-"Homepage" = "https://github.com/orce-labs/roe-guard"
-"Repository" = "https://github.com/orce-labs/roe-guard"
-"Issues" = "https://github.com/orce-labs/roe-guard/issues"
+"Homepage" = "https://github.com/0rce-Labs/roe-guard"
+"Repository" = "https://github.com/0rce-Labs/roe-guard"
+"Issues" = "https://github.com/0rce-Labs/roe-guard/issues"
 
 [tool.setuptools]
 packages = ["roe_guard", "roe_guard.integrations"]

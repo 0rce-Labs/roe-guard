@@ -28,7 +28,7 @@ you call before doing anything risky. If your tool doesn't call it,
 roe-guard can't help you — and that's a deliberate trade-off, spelled
 out below.
 
-The project is the reference implementation of [0rce Labs](https://github.com/orce-labs)'
+The project is the reference implementation of [0rce Labs](https://github.com/0rce-Labs)'
 *zero-unauthorized-operations* principle. You don't need 0rce to use it.
 
 ### Why bother
@@ -313,7 +313,7 @@ suite on Python 3.10 through 3.13.
 
 MIT — see [LICENSE](LICENSE).
 
-Built by [0rce Labs](https://github.com/orce-labs).
+Built by [0rce Labs](https://github.com/0rce-Labs).
 Full design notes and the v0.2/v0.3 roadmap live in
 [`docs/SPEC.md`](docs/SPEC.md).
 
@@ -346,7 +346,7 @@ Kodunuzun içinde, riskli bir şey yapmadan önce çağırdığınız sıradan
 bir fonksiyon. Aracınız onu çağırmıyorsa yapabileceği bir şey yok —
 bu bilinçli bir tercih, nedenlerini aşağıda uzun uzun anlattım.
 
-Proje, [0rce Labs](https://github.com/orce-labs)'ın
+Proje, [0rce Labs](https://github.com/0rce-Labs)'ın
 *sıfır-yetkisiz-operasyon* ilkesinin referans uygulaması.
 Kullanmak için 0rce'ye ihtiyacınız yok.
 
@@ -631,7 +631,7 @@ Spec'teki coverage hedefi: ≥%85. CI'daki matrix Python 3.10'dan
 
 MIT — bkz. [LICENSE](LICENSE).
 
-[0rce Labs](https://github.com/orce-labs) tarafından geliştirildi.
+[0rce Labs](https://github.com/0rce-Labs) tarafından geliştirildi.
 Tasarım notları ve v0.2/v0.3 yol haritası [`docs/SPEC.md`](docs/SPEC.md)
 içinde.
 
