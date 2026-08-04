@@ -1,6 +1,6 @@
 # roe-guard
 
-[![CI](https://github.com/sametyilmaztemel/roe-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/sametyilmaztemel/roe-guard/actions/workflows/ci.yml)
+[![CI](https://github.com/0rce-Labs/roe-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/0rce-Labs/roe-guard/actions/workflows/ci.yml)
 [![Python ≥ 3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -55,7 +55,7 @@ auditors want.
 From source, in editable mode:
 
 ```bash
-git clone https://github.com/sametyilmaztemel/roe-guard.git
+git clone https://github.com/0rce-Labs/roe-guard.git
 cd roe-guard
 pip install -e ".[dev]"
 ```
@@ -375,7 +375,7 @@ niteliğinde olacak kadar sıkı.
 Kaynaktan, geliştirme modunda:
 
 ```bash
-git clone https://github.com/sametyilmaztemel/roe-guard.git
+git clone https://github.com/0rce-Labs/roe-guard.git
 cd roe-guard
 pip install -e ".[dev]"
 ```
