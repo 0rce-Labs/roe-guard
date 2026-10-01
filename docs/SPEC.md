@@ -92,6 +92,11 @@ approval_required_for: ["persistence-test"]
 approvers: ["ops-lead@acme.example"]
 ```
 
+**Şema sürümü.** `schema_version` opsiyonel bir tamsayıdır; yoksa `1` kabul edilir. Bu sürümün
+desteklediği en büyük değer `MAX_SCHEMA_VERSION`'dır. Daha büyük, 1'den küçük, tamsayı olmayan
+(bool dahil) ya da boş bir değer `PolicyParseError` (`field` = `schema_version`) ile reddedilir.
+Politika yüklenmez ve hiçbir aksiyona izin verilmez (fail-closed).
+
 ### Karar mantığı (öncelik sırası):
 
 1. `valid_from`/`valid_until` dışında mı? → **DENY** (PolicyExpiredError)

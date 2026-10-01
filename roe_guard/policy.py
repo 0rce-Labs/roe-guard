@@ -184,6 +184,29 @@ def _parse_str_list(value: Any, *, field: str) -> list[str]:
 # Public API
 # ---------------------------------------------------------------------------
 
+MAX_SCHEMA_VERSION = 1
+
+
+def _parse_schema_version(raw: dict[str, Any]) -> int:
+    """Validate the optional ``schema_version`` key (fail-closed).
+
+    Missing means ``1``. Anything that is not an ``int`` in
+    ``[1, MAX_SCHEMA_VERSION]`` (bools explicitly excluded) raises
+    :class:`PolicyParseError` with ``field="schema_version"``.
+    """
+    v = raw.get("schema_version", 1)
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise PolicyParseError(
+            f"schema_version must be an integer, got {type(v).__name__}",
+            field="schema_version",
+        )
+    if v < 1 or v > MAX_SCHEMA_VERSION:
+        raise PolicyParseError(
+            f"unsupported schema_version {v} (this roe-guard supports up to {MAX_SCHEMA_VERSION})",
+            field="schema_version",
+        )
+    return v
+
 
 def load_policy(path: str | Path) -> Policy:
     """Load and validate a policy from a YAML file (spec §5).
@@ -225,6 +248,9 @@ def load_policy(path: str | Path) -> Policy:
             f"top-level YAML must be a mapping, got {type(raw).__name__}",
             field=str(p),
         )
+
+    # --- Schema version (before required fields; fail-closed) -----------
+    schema_version = _parse_schema_version(raw)
 
     # --- Required fields ------------------------------------------------
     missing = [f for f in _REQUIRED_TOP_LEVEL if f not in raw]
@@ -287,7 +313,8 @@ def load_policy(path: str | Path) -> Policy:
         blackout_windows=blackout_windows,
         approval_required_for=approval_required_for,
         approvers=approvers,
+        schema_version=schema_version,
     )
 
 
-__all__ = ["load_policy"]
+__all__ = ["MAX_SCHEMA_VERSION", "load_policy"]
