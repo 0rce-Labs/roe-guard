@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from roe_guard.exceptions import OutOfScopeError
@@ -135,8 +136,8 @@ class Engagement:
     """A :class:`Policy` bound to a concrete operation context.
 
     This is the primary user-facing object.  Created from a policy file
-    via ``Engagement.from_file()`` (implemented in T3) and queried with
-    ``check()`` / ``enforce()`` (implemented in T4).
+    via ``Engagement.from_file()`` and queried with ``check()`` (a thin
+    wrapper around :func:`roe_guard.engine.enforce`).
 
     Attributes:
         policy: The parsed engagement policy.
@@ -144,15 +145,22 @@ class Engagement:
 
     policy: Policy
 
-    # --- Planned public API (T3 / T4 / T6) -------------------------------
+    # --- Public API ------------------------------------------------------
 
     @classmethod
-    def from_file(cls, path: str) -> Engagement:
+    def from_file(cls, path: str | Path) -> Engagement:
         """Load a policy from a YAML file and return an :class:`Engagement`.
 
-        Implemented in T3 (:func:`roe_guard.policy.load_policy`).
+        Raises :class:`roe_guard.exceptions.PolicyParseError` if the file
+        does not exist, is not valid YAML, or fails policy validation (see
+        :func:`roe_guard.policy.load_policy`).  Other OS or decoding errors
+        (e.g. ``IsADirectoryError``, ``PermissionError``,
+        ``UnicodeDecodeError``) propagate unchanged.  In every failure case
+        no :class:`Engagement` is created.
         """
-        raise NotImplementedError("Engagement.from_file() — implemented in T3")
+        from roe_guard.policy import load_policy
+
+        return cls(policy=load_policy(path))
 
     def check(
         self,
@@ -162,8 +170,8 @@ class Engagement:
     ) -> Decision:
         """Evaluate a single action against the policy.
 
-        Thin wrapper around :func:`roe_guard.engine.enforce` (T4) that
-        binds the engagement automatically.
+        Thin wrapper around :func:`roe_guard.engine.enforce` that binds
+        the engagement automatically.
         """
         # Local import to avoid circular dependency at module load time.
         from roe_guard.engine import enforce

@@ -4,6 +4,12 @@ All notable changes to roe-guard are documented here.  The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Top-level public API exports (`from roe_guard import Engagement, guarded, ...`) and a working `Engagement.from_file()`.
+
 ## [0.1.0a1] — Unreleased
 
 First public alpha.  v0.1.0a1 ships the core policy-enforcement
