@@ -79,7 +79,7 @@ jobs:
         # is not yet on PyPI (T9 ticket is the packaging step).
         run: |
           pip install pyyaml
-          pip install pytest pytest-cov ruff tomli mypy types-PyYAML
+          pip install pytest pytest-cov ruff tomli mypy==2.4.0 types-PyYAML==6.0.12.20260906
 
       - name: Run pip-audit
         # Audit only the third-party deps from requirements-style list,
@@ -91,7 +91,7 @@ jobs:
           pytest-cov
           ruff
           tomli
-          mypy
-          types-PyYAML
+          mypy==2.4.0
+          types-PyYAML==6.0.12.20260906
           EOF
           pip-audit --strict -r /tmp/requirements.txt
