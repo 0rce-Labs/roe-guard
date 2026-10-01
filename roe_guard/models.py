@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from roe_guard.exceptions import OutOfScopeError
@@ -147,12 +148,15 @@ class Engagement:
     # --- Planned public API (T3 / T4 / T6) -------------------------------
 
     @classmethod
-    def from_file(cls, path: str) -> Engagement:
+    def from_file(cls, path: str | Path) -> Engagement:
         """Load a policy from a YAML file and return an :class:`Engagement`.
 
-        Implemented in T3 (:func:`roe_guard.policy.load_policy`).
+        Raises :class:`roe_guard.exceptions.PolicyParseError` when the file
+        cannot be read or parsed.
         """
-        raise NotImplementedError("Engagement.from_file() — implemented in T3")
+        from roe_guard.policy import load_policy
+
+        return cls(policy=load_policy(path))
 
     def check(
         self,
