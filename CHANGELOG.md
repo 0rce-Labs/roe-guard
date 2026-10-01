@@ -9,6 +9,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Top-level public API exports (`from roe_guard import Engagement, guarded, ...`) and a working `Engagement.from_file()`.
+- CI enforces a line-coverage floor (`fail_under` in `pyproject.toml`).
 
 ## [0.1.0a1] — Unreleased
 

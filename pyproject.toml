@@ -50,5 +50,12 @@ roe-guard = "roe_guard.cli:main"
 [tool.setuptools]
 packages = ["roe_guard", "roe_guard.integrations"]
 
+[tool.coverage.run]
+source = ["roe_guard"]
+
+[tool.coverage.report]
+fail_under = 93
+show_missing = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
