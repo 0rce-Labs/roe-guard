@@ -1,7 +1,5 @@
 """schema_version guard: fail-closed rejection of unsupported versions."""
 
-from datetime import datetime, timezone
-
 import pytest
 import yaml
 
@@ -36,7 +34,7 @@ def test_explicit_one(tmp_path):
     assert load_policy(p).schema_version == 1
 
 
-def test_fixtures_default_to_one(tmp_path):
+def test_fixtures_default_to_one():
     from pathlib import Path
 
     fixtures = Path(__file__).parent / "fixtures"
@@ -54,6 +52,9 @@ def test_invalid_versions_rejected(tmp_path, value):
     with pytest.raises(PolicyParseError) as exc:
         load_policy(p)
     assert exc.value.field == "schema_version"
+    if value in (2, 99):
+        assert f"unsupported schema_version {value}" in str(exc.value)
+        assert "supports up to 1" in str(exc.value)
 
 
 def test_version_checked_before_required_fields(tmp_path):
@@ -70,7 +71,8 @@ def test_cli_validate_rejects_unsupported(tmp_path, capsys):
     data = dict(BASE, schema_version=99)
     p = _write(tmp_path, data)
     assert main(["validate", p]) == 1
-    capsys.readouterr()
+    _, err = capsys.readouterr()
+    assert "schema_version" in err
 
 
 def test_cli_check_rejects_unsupported(tmp_path, capsys):
@@ -87,10 +89,12 @@ def test_cli_check_rejects_unsupported(tmp_path, capsys):
         "--policy",
         p,
         "--now",
-        datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc).isoformat(),
+        NOW,
     ]
     assert main(args) == 1
-    capsys.readouterr()
+    out, err = capsys.readouterr()
+    assert "schema_version" in err
+    assert "outcome" not in out.lower()
 
 
 def test_cli_check_allows_base(tmp_path, capsys):

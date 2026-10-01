@@ -3,8 +3,10 @@ roe_guard.policy
 
 YAML policy loading and schema validation (spec §5).
 
-The only public entry point is :func:`load_policy`, which:
+The public entry point is :func:`load_policy` (``MAX_SCHEMA_VERSION`` is the
+highest supported policy ``schema_version``), which:
     - reads a YAML file with ``yaml.safe_load`` (never ``yaml.load`` — RCE risk),
+    - rejects an unsupported ``schema_version`` before any other check,
     - validates the top-level structure against spec §5,
     - converts ISO-8601 timestamps to timezone-aware UTC datetimes,
     - validates every CIDR with :func:`ipaddress.ip_network`,
@@ -214,6 +216,8 @@ def load_policy(path: str | Path) -> Policy:
     Uses ``yaml.safe_load`` (never ``yaml.load``) to eliminate RCE risk.
 
     Validates:
+        - ``schema_version`` (optional int in ``[1, MAX_SCHEMA_VERSION]``),
+          checked before the required fields.
         - Required top-level fields (``engagement_id``, ``valid_from``,
           ``valid_until``, ``scope``).
         - ISO-8601 datetime format for all timestamps (timezone-aware UTC).
@@ -228,8 +232,9 @@ def load_policy(path: str | Path) -> Policy:
 
     Raises:
         roe_guard.exceptions.PolicyParseError: On any structural or
-            semantic validation failure (missing fields, invalid dates,
-            invalid CIDR, malformed YAML, or empty scope entry).
+            semantic validation failure (unsupported ``schema_version``,
+            missing fields, invalid dates, invalid CIDR, malformed YAML, or
+            empty scope entry).
     """
     p = Path(path)
     if not p.exists():
