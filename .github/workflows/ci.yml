@@ -40,6 +40,9 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
 
+      - name: Type check (mypy)
+        run: mypy
+
       - name: Version consistency check
         run: |
           pyproject_version=$(python -c "import sys
@@ -76,7 +79,7 @@ jobs:
         # is not yet on PyPI (T9 ticket is the packaging step).
         run: |
           pip install pyyaml
-          pip install pytest pytest-cov ruff tomli
+          pip install pytest pytest-cov ruff tomli mypy types-PyYAML
 
       - name: Run pip-audit
         # Audit only the third-party deps from requirements-style list,
@@ -88,5 +91,7 @@ jobs:
           pytest-cov
           ruff
           tomli
+          mypy
+          types-PyYAML
           EOF
           pip-audit --strict -r /tmp/requirements.txt
