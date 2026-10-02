@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Structural schema (SPEC §14.8). Loader-only checks: date order, CIDR validity, ISO-8601 parsing, whole-string ASCII pattern matching and rejecting whole-number floats (2.0) where SPEC requires int.",
   "$id": "https://raw.githubusercontent.com/0rce-Labs/roe-guard/main/schema/policy.v2.json",
   "title": "roe-guard policy schema v2",
   "type": "object",
@@ -21,7 +22,7 @@
       }
     },
     "actions": {
-      "type": "object",
+      "type": ["object", "null"],
       "additionalProperties": false,
       "patternProperties": {"^x-": true},
       "properties": {

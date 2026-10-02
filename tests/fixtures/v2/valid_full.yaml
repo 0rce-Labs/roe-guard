@@ -5,8 +5,10 @@ valid_until: "2026-10-02T00:00:00Z"
 scope:
   allow:
     - hostname: "*.api.example.com"
+      x-tag: "t"
 actions:
   allow: ["tool.http.get"]
+  x-note: "n"
 mode: observe
 agent:
   id: "spiffe://example.org/tenant/t1/agent/a1/sandbox/*"

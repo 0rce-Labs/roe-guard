@@ -1,5 +1,5 @@
 schema_version: 2
-engagement_id: "fx-invalid-unknown-nested"
+engagement_id: "fx-invalid_unknown_nested_key"
 valid_from: "2026-10-01T00:00:00Z"
 valid_until: "2026-10-02T00:00:00Z"
 scope:

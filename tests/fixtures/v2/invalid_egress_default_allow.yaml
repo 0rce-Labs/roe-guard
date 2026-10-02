@@ -1,5 +1,5 @@
 schema_version: 2
-engagement_id: "fx-invalid-egress-default"
+engagement_id: "fx-invalid_egress_default_allow"
 valid_from: "2026-10-01T00:00:00Z"
 valid_until: "2026-10-02T00:00:00Z"
 scope:
@@ -9,7 +9,3 @@ actions:
   allow: ["tool.http.get"]
 egress:
   default: allow
-  http:
-    allow:
-      - host: "api.example.com"
-        ports: [443]
