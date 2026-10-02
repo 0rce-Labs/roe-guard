@@ -97,6 +97,13 @@ desteklediği en büyük değer `MAX_SCHEMA_VERSION`'dır. Daha büyük, 1'den k
 (bool dahil) ya da boş bir değer `PolicyParseError` (`field` = `schema_version`) ile reddedilir.
 Politika yüklenmez ve hiçbir aksiyona izin verilmez (fail-closed).
 
+**Bilinmeyen anahtarlar.** `schema_version: 2` politikalarında tanınmayan her anahtar, her
+seviyede `PolicyParseError` ile reddedilir. `x-` önekli uzantı anahtarları her sürümde yok
+sayılır. v1'de `mode`, `agent`, `sandbox`, `egress` ve `approval` anahtarları
+`schema_version: 2` ister. Diğer bilinmeyen v1 anahtarları `UnknownKeyWarning` ile uyarılır ve
+yok sayılır. v2 blokları tanımlanana kadar v2 dosyasındaki bu bloklar da reddedilir
+(fail-closed).
+
 ### Karar mantığı (öncelik sırası):
 
 1. `valid_from`/`valid_until` dışında mı? → **DENY** (PolicyExpiredError)

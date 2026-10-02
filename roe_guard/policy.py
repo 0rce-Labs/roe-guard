@@ -19,13 +19,14 @@ All failures raise :class:`~roe_guard.exceptions.PolicyParseError`.
 from __future__ import annotations
 
 import ipaddress
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from roe_guard.exceptions import PolicyParseError
+from roe_guard.exceptions import PolicyParseError, UnknownKeyWarning
 from roe_guard.models import BlackoutWindow, Policy, Scope, ScopeEntry
 
 _REQUIRED_TOP_LEVEL = ("engagement_id", "valid_from", "valid_until", "scope")
@@ -187,7 +188,48 @@ def _parse_str_list(value: Any, *, field: str) -> list[str]:
 # Public API
 # ---------------------------------------------------------------------------
 
-MAX_SCHEMA_VERSION = 1
+MAX_SCHEMA_VERSION = 2
+
+_TOP_KEYS = frozenset(
+    {
+        "engagement_id",
+        "valid_from",
+        "valid_until",
+        "scope",
+        "actions",
+        "blackout_windows",
+        "approval_required_for",
+        "approvers",
+        "schema_version",
+    }
+)
+_V2_RESERVED_TOP = frozenset({"mode", "agent", "sandbox", "egress", "approval"})
+_SCOPE_KEYS = frozenset({"allow", "deny"})
+_SCOPE_ENTRY_KEYS = frozenset({"cidr", "hostname"})
+_ACTIONS_KEYS = frozenset({"allow", "deny"})
+_BLACKOUT_KEYS = frozenset({"start", "end", "reason"})
+
+
+def _check_keys(
+    mapping: dict[Any, Any],
+    allowed: frozenset[str],
+    *,
+    path: str,
+    strict: bool,
+) -> None:
+    """Reject unknown keys (strict) or warn (v1). ``x-*`` keys are skipped."""
+    for key in mapping:
+        if isinstance(key, str) and key.startswith("x-"):
+            continue
+        if key in allowed:
+            continue
+        full = f"{path}.{key}" if path else str(key)
+        if strict:
+            raise PolicyParseError(
+                f"unknown key: {full}",
+                field=full,
+            )
+        warnings.warn(f"unknown key ignored: {full}", UnknownKeyWarning, stacklevel=2)
 
 
 def _parse_schema_version(raw: dict[str, Any]) -> int:
@@ -257,6 +299,45 @@ def load_policy(path: str | Path) -> Policy:
 
     # --- Schema version (before required fields; fail-closed) -----------
     schema_version = _parse_schema_version(raw)
+    strict = schema_version >= 2
+
+    if not strict:
+        for key in _V2_RESERVED_TOP:
+            if key in raw:
+                raise PolicyParseError(
+                    f"'{key}' requires schema_version: 2",
+                    field=key,
+                )
+
+    # --- Unknown-key validation (per level; x-* skipped) ----------------
+    _check_keys(raw, _TOP_KEYS, path="", strict=strict)
+    scope_raw = raw.get("scope", {})
+    if isinstance(scope_raw, dict):
+        _check_keys(scope_raw, _SCOPE_KEYS, path="scope", strict=strict)
+        for list_key in ("allow", "deny"):
+            entries = scope_raw.get(list_key, [])
+            if isinstance(entries, list):
+                for idx, entry in enumerate(entries):
+                    if isinstance(entry, dict):
+                        _check_keys(
+                            entry,
+                            _SCOPE_ENTRY_KEYS,
+                            path=f"scope.{list_key}[{idx}]",
+                            strict=strict,
+                        )
+    actions_raw = raw.get("actions", {})
+    if isinstance(actions_raw, dict):
+        _check_keys(actions_raw, _ACTIONS_KEYS, path="actions", strict=strict)
+    windows = raw.get("blackout_windows", [])
+    if isinstance(windows, list):
+        for idx, window in enumerate(windows):
+            if isinstance(window, dict):
+                _check_keys(
+                    window,
+                    _BLACKOUT_KEYS,
+                    path=f"blackout_windows[{idx}]",
+                    strict=strict,
+                )
 
     # --- Required fields ------------------------------------------------
     missing = [f for f in _REQUIRED_TOP_LEVEL if f not in raw]
