@@ -259,7 +259,7 @@ aynen uygular. "Zorlayan platform", roe-guard kararlarını çalışma zamanınd
 - v1'de diğer bilinmeyen anahtarlar `UnknownKeyWarning` ile uyarılır ve yok sayılır.
 - v2'de her seviyede bilinmeyen anahtar `PolicyParseError` verir; `field` alanı noktalı yoldur (ör. `egress.http.allow[1].proto`).
 - `x-` ile başlayan anahtarlar her seviyede ve her sürümde yok sayılır. Kökteki `x-*` anahtarları `Policy.extensions` sözlüğüne konur. Üreticiye özgü alanlar yalnız `x-<üretici>` altında yaşar; roe-guard bunların içeriğini yorumlamaz.
-- §14'teki bütün düzenli ifadeler dizenin tamamına uygulanır (Python'da `re.fullmatch`). Sondaki satır sonu dahil fazladan karakter eşleşmeyi bozar.
+- §14'teki bütün düzenli ifadeler dizenin tamamına ve ASCII anlamıyla uygulanır (Python'da `re.fullmatch(..., flags=re.ASCII)`); `\d` yalnız `0-9`'dur. Sondaki satır sonu dahil fazladan karakter eşleşmeyi bozar.
 - Hata `field` kuralları: bilinmeyen anahtarda anahtarın yolu, eksik zorunlu anahtarda eksik anahtarın yolu (ör. `approval.timeout_seconds`), tip ya da değer hatasında değerin yolu (ör. `egress.http.allow[0].ports[0]`). v1'in mevcut `field` değerleri değişmez; ör. kökteki eksik alanlar için `<top>`.
 
 ### 14.2 v2 alanları
@@ -521,7 +521,7 @@ ardından gelen `\n`'dir. Kayıtta tam olarak şu 16 anahtar bulunur:
 - Dosya `<audit dosyası>.checkpoints.jsonl`'dir. Her satır tam olarak şu 7 anahtarı içeren nesnenin JCS çıktısıdır: `v` (2), `chain_id`, `seq` (kapsanan son kaydın `seq` değeri), `head_hash` (o kaydın `entry_hash`'i), `timestamp` (aynı biçim), `key_id`, `sig`.
 - `key_id` = `sha256:` + ham 32 bayt ed25519 açık anahtarın SHA-256 hex'i.
 - `sig`, `JCS(checkpoint − sig)` üzerinde ed25519 imzasıdır; padding'siz base64url, 86 karakter.
-- Yazıcıya imzalayıcı verilmişse yazıcı her `checkpoint_every` kayıtta (varsayılan 1000) ve kapanışta checkpoint üretir. Checkpoint'ten önce `fsync` yapılır. İmzalayıcı yoksa checkpoint yazılmaz; zincir yalnız hash bağlarıyla korunur (§7 madde 2).
+- Yazıcıya imzalayıcı verilmişse yazıcı her `checkpoint_every` kayıtta (varsayılan 1000) checkpoint üretir; kapanışta yalnız son checkpoint'ten sonra en az bir kayıt yazılmışsa checkpoint üretir. Checkpoint'ten önce `fsync` yapılır. İmzalayıcı yoksa checkpoint yazılmaz; zincir yalnız hash bağlarıyla korunur (§7 madde 2).
 - İmza anahtarını çağıran sağlar. Anahtar saklama ve yayımlama roe-guard'ın kapsamı dışındadır.
 
 **Karışık zincir:** v1 satırlarından sonra v2 satırları gelebilir. v2 satırından sonra v1 satırı
