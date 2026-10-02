@@ -213,18 +213,18 @@ Policy yükleme, karar motoru, hash-chain audit, decorator/context manager, CLI 
 
 | Ticket | Başlık | Çıktı |
 |--------|--------|-------|
-| T13 | Public API export + `Engagement.from_file` | Kök paket 23 isimli API'yi dışa verir; `Engagement.from_file()` çalışır. |
-| T14 | `schema_version` kapısı | Opsiyonel alan; desteklenmeyen sürüm `PolicyParseError` ile reddedilir (fail-closed). |
-| T15 | v2 bilinmeyen anahtar reddi | v2'de bilinmeyen anahtar her seviyede reddedilir; `x-*` serbest; v1'de v2-rezerve bloklar reddedilir, diğerleri `UnknownKeyWarning`. |
-| T16 | `py.typed` + mypy | PEP 561 işaretleyici; CI'da `mypy --strict` adımı. |
-| T17 | Coverage eşiği | CI `fail_under` eşiğini uygular. |
-| T18 | Bu SPEC | Politika şeması v2 ve audit kaydı v2 §14'te tanımlı. |
-| T19 | JSON Schema v1 + v2 | Her iki sürüm için JSON Schema; editör desteği. |
-| T20 | v2 yükleyici + `EnforcementMode` + `reason_code` | v2 blokları (`mode`, `agent`, `sandbox`, `egress`, `approval`) yüklenir. |
-| T21 | Agent kimlik adımı | `agent.id` SPIFFE/glob eşleşmesi karar merdivenine girer. |
-| T22 | `enforce_egress` | `egress` bloğu kararı karara eklenir. |
-| T23 | Conformance vektörleri | Dil bağımsız politika+girdi→verdict vektörleri. |
-| T24 | Audit kaydı v2 | §14.7'deki alanlar audit kaydına eklenir. |
+| T13 | Public API export + `Engagement.from_file` | Kök paket public API'yi `__all__` ile dışa verir; `Engagement.from_file()` çalışır. |
+| T14 | `schema_version` kapısı | `schema_version` alanı ve `MAX_SCHEMA_VERSION` kapısı; desteklenmeyen sürüm `PolicyParseError` ile reddedilir (§5, §14.1). |
+| T15 | v2 bilinmeyen anahtar reddi | v2'de bilinmeyen anahtar her seviyede reddedilir, `x-*` yok sayılır; v1'de v2 blokları reddedilir, diğer bilinmeyenler `UnknownKeyWarning` verir (§5, §14.1). |
+| T16 | `py.typed` + mypy | PEP 561 `py.typed` işaretleyicisi; CI'da strict `mypy` adımı. |
+| T17 | Coverage eşiği | CI coverage `fail_under` eşiğini zorlar. |
+| T18 | Bu SPEC | Politika şeması v2 ve audit kaydı v2 sözleşmesi (§14). |
+| T19 | JSON Schema v1 + v2 | `schema/` altındaki JSON Schema dosyaları (§14.8). |
+| T20 | v2 yükleyici + `EnforcementMode` + `reason_code` | v2 blokları, `parse_policy`, `EnforcementMode`, `ReasonCode` ve yeni `Decision`/`Policy` alanları (§14.2, §14.3, §14.6). |
+| T21 | Agent kimlik adımı | Karar merdiveninde adım 0 ve `AgentIdentity` (§14.4). |
+| T22 | `enforce_egress` | `enforce_egress` ve `Engagement.check_egress` (§14.5). |
+| T23 | Conformance vektörleri | `conformance/` altındaki dil bağımsız vektörler (§14.8). |
+| T24 | Audit kaydı v2 | `AuditLogV2`, checkpoint'ler ve v2 zincir doğrulaması (§14.7). |
 
 ## 11. Marka ve Yayın Notları
 
@@ -247,6 +247,10 @@ Policy yükleme, karar motoru, hash-chain audit, decorator/context manager, CLI 
 
 ## 14. Politika Şeması v2 ve Audit Kaydı v2
 
+Bu bölüm politika şeması v2'yi ve audit kaydı v2'yi tanımlar. v2 işleri (§10, T19–T24) bu metni
+aynen uygular. "Zorlayan platform", roe-guard kararlarını çalışma zamanında uygulayan sistemdir
+(ör. bir sandbox altyapısı); roe-guard bu platformun iç ayrıntılarını varsaymaz.
+
 ### 14.1 Sürümleme ve anahtar kuralları
 
 - `schema_version` alanı v1'de opsiyoneldir, yoksa `1` sayılır. v2 dosyasında zorunludur ve değeri `2`'dir.
@@ -259,48 +263,77 @@ Policy yükleme, karar motoru, hash-chain audit, decorator/context manager, CLI 
 
 ### 14.2 v2 alanları
 
-Örnek — bütün v2 blokları:
+Bütün v2 bloklarını içeren örnek:
 
 ```yaml
 schema_version: 2
-engagement_id: example-engagement-2026-10
+engagement_id: "example-2026-10"
 valid_from: "2026-10-01T00:00:00Z"
 valid_until: "2026-10-31T23:59:59Z"
-mode: observe
+
 scope:
   allow:
-    - cidr: 192.0.2.0/24
+    - cidr: "192.0.2.0/24"
+    - hostname: "*.staging.example.org"
   deny:
-    - cidr: 203.0.113.0/24
+    - cidr: "192.0.2.128/25"
+
 actions:
-  allow: [tool.read]
-  deny: [tool.write]
+  allow: ["recon", "scan"]
+  deny: ["destructive"]
+
 blackout_windows:
-  - start: "2026-10-10T00:00:00Z"
-    end: "2026-10-11T00:00:00Z"
-    reason: maintenance
-approval_required_for: [tool.deploy]
-approval:
-  timeout_seconds: 300
-  on_timeout: deny
+  - start: "2026-10-15T00:00:00Z"
+    end: "2026-10-16T00:00:00Z"
+    reason: "bakım penceresi"
+
+approval_required_for: ["scan"]
+approvers: ["ops-lead@example.com"]
+
+mode: observe
+
 agent:
-  id: spiffe://example.org/tenant/main/agent/*/sandbox/*
-  runtime: [claude-code, hermes]
+  id: "spiffe://example.org/agents/research-*"
+  runtime: ["example-runtime"]
+
 sandbox:
   filesystem:
-    read: [/workspace/**]
-    write: [/workspace/out/**]
-    deny: [/workspace/secrets/**]
+    read: ["/workspace/**"]
+    write: ["/workspace/out/**"]
+    deny: ["/workspace/.secrets/**"]
+  syscalls:
+    profile: "default"
+    deny: ["ptrace", "mount"]
+  resources:
+    pids_max: 256
+    memory_max: "2G"
+    cpu_max: "100000 100000"
+  credentials:
+    max_ttl_seconds: 900
+  imds: deny
+
 egress:
   default: deny
   http:
     allow:
-      - host: api.example.com
+      - host: "*.example.com"
         ports: [443]
-approval_required_for: [tool.deploy]
+        methods: ["GET", "POST"]
+      - cidr: "198.51.100.0/24"
+        ports: [443, 8443]
+    deny:
+      - host: "uploads.example.com"
+  dns:
+    allow: ["*.example.com"]
+    deny: ["uploads.example.com"]
+    record_types: ["A", "AAAA"]
+
+approval:
+  timeout_seconds: 600
+  on_timeout: deny
+
 x-vendor:
-  internal_note: example only
-approvers: [ops-lead@exbin.example]
+  change_ticket: "CHG-0001"
 ```
 
 | Alan | Tip | Zorunlu | Varsayılan | Kural |
@@ -311,102 +344,217 @@ approvers: [ops-lead@exbin.example]
 | `agent.id` | str | blok varsa evet | — | `spiffe://` ile başlar; glob (`fnmatch.fnmatchcase`, büyük/küçük harf duyarlı) |
 | `agent.runtime` | [str] | hayır | `[]` | boş olmayan dizeler |
 | `sandbox.filesystem.read` / `.write` / `.deny` | [str] | hayır | `[]` | boş olmayan glob dizeleri |
-| `egress.default` | str | hayır | `deny` | `deny`; v2'de başka değer tanımlı değildir |
-| `egress.http.allow[].host` | str | blok varsa evet | — | boş olmayan alan adı; glob içermez |
-| `egress.http.allow[].ports` | [int] | hayır | `[443, 80]` | 1–65535 aralığında; tekrarsız |
-| `egress.http.allow[].proto` | str | hayır | `https` | `http` ya da `https` |
-| `egress.dns.resolvers` | [str] | hayır | `[]` | boşsa platformun resolver'ı kullanılır |
-| `approval.timeout_seconds` | int | blok varsa evet | — | 1–3600 aralığında |
-| `approval.on_timeout` | str | hayır | `deny` | `deny`; v2'de başka değer tanımlı değildir |
-| `x-*` | herhangi | hayır | — | her seviyede yok sayılır; köktekiler `Policy.extensions`'e konur |
+| `sandbox.syscalls.profile` | str | hayır | — | boş olmayan |
+| `sandbox.syscalls.deny` | [str] | hayır | `[]` | boş olmayan |
+| `sandbox.resources.pids_max` | int | hayır | — | ≥ 1, bool değil |
+| `sandbox.resources.memory_max` / `.cpu_max` | str | hayır | — | boş olmayan; biçimi zorlayan platform yorumlar |
+| `sandbox.credentials.max_ttl_seconds` | int | hayır | — | ≥ 1, bool değil |
+| `sandbox.imds` | str | hayır | `deny` | yalnız `deny` |
+| `egress.default` | str | hayır | `deny` | yalnız `deny` (fail-open ifade edilemez) |
+| `egress.http.allow[]` | nesne | hayır | `[]` | `host` (glob) ya da `cidr`'den tam olarak biri; `ports` zorunlu, en az 1 eleman, her biri 1..65535; `methods` opsiyonel, her biri `^[A-Z]+$` |
+| `egress.http.deny[]` | nesne | hayır | `[]` | `host` ya da `cidr`'den tam olarak biri |
+| `egress.dns.allow` / `.deny` | [str] | hayır | `[]` | boş olmayan alan adı glob'ları |
+| `egress.dns.record_types` | [str] | hayır | `[A, AAAA]` | `A`, `AAAA`, `CNAME`; tekrarsız, en az 1 |
+| `approval.timeout_seconds` | int | blok varsa evet | — | ≥ 1, bool değil |
+| `approval.on_timeout` | str | hayır | `deny` | yalnız `deny` |
 
-Bilinmeyen bir değer ya da tip, ilgili yol ile `PolicyParseError` üretir (§14.1).
+Notlar:
+
+- v2'nin yeni bloklarında `null` liste kabul edilmez.
+- `sandbox`, `egress.dns` ve `approval` blokları roe-guard'da yalnız doğrulanır. Zorlanmaları politikayı uygulayan platformun işidir.
+- `approvers` hâlâ kullanılmaz.
 
 ### 14.3 Modlar
 
-| Durum | `enforce` | `observe` |
-|---|---|---|
-| `ALLOW` | İşlem geçer; olay kaydedilir | İşlem geçer; olay kaydedilir |
-| `DENY` | İşlem engellenir; attempt-level sinyal üretilir | İşlem geçer; `verdict=DENY`, `mode=observe` olayı kaydedilir; sinyal AGS'ye girer |
-| `REQUIRES_APPROVAL` | Onay gelene ya da zaman aşımına kadar bekletilir; zaman aşımında `DENY`; `approval` bloğu yoksa bekletilmeden engellenir | Bekletilmez, geçer; "bekletilirdi" olayı ve sinyal kaydedilir |
-| Sert taban ihlali | Reddedilir; olay kaydedilir | Reddedilir; olay kaydedilir (moddan bağımsız) |
-| Audit kaydı | Açık | Açık |
-
-`mode` alanı bulunmayan bir v2 politikası `enforce` modundadır. Onboarding şablonları açıkça
-`mode: observe` ile başlar; observe'dan enforce'a geçmek bir politika değişikliğidir ve audit
-kaydına girer.
+- `EnforcementMode(str, Enum)`: `ENFORCE = "enforce"`, `OBSERVE = "observe"`. `DecisionType`'tan ayrıdır; `DecisionType` üç üyede kalır.
+- `enforce`: DENY aksiyonu engeller. REQUIRES_APPROVAL onay gelene kadar bekletilir; `approval.timeout_seconds` dolarsa sonuç DENY olur.
+- `observe`: Verdict hesaplanır ve kaydedilir, aksiyon geçirilir. DENY'ler yine deneme sinyalidir.
+- Sert taban her modda zorlanır. Şu iki durum observe modunda da engeller:
+  - `EGRESS_IMDS_DENIED` (instance metadata servisi ve link-local çıkış).
+  - `POLICY_INVALID` (politika yüklenemedi; mod da bilinmez).
+- roe-guard'ın kendi yardımcıları moddan bağımsızdır ve verdict'e göre davranır (fail-closed): `guarded`, `Decision.raise_if_denied`, `window` ve CLI `check` çıkış kodu (0/1/2). Observe davranışını zorlayan platform uygular.
+- Her `Decision` politikanın modunu `mode` alanında taşır.
 
 ### 14.4 Karar merdiveni v2
 
-v1'deki 8 adımlı sıranın başına **adım 0** eklenir; diğer adımlar ve öncelik sırası değişmez:
+İmzalar:
 
-0. **`enforce_egress` (A-6).** İstek bir HTTP(S) çıkışı ise ve `egress` bloğu tanımlıysa:
-   hedef host + port + protokol `egress.http.allow` listesinde yoksa **DENY**
-   (`reason = "egress not allowed"`). Agent kimliği `agent.id` glob'larından birine
-   uymuyorsa **DENY** (`reason = "agent identity not in policy"`). Kontrol tüm modlarda
-   yapılır; `observe` modunda engelleme yerine "olurdu DENY" kaydı düşer.
+- `enforce(engagement, target, action_type, now=None, metadata=None, *, agent=None)`.
+- `Engagement.check(target, action_type, now=None, *, agent=None)`.
+- `guarded(engagement, action_type, target_arg="target", *, agent=None)`.
+- `AgentIdentity(id: str, runtime: str | None = None)`.
 
-Sonrasında v1 merdiveni aynen uygulanır (zaman penceresi → blackout → scope → actions →
-approval → audit). Aynı istekte birden fazla kural ihlal edilse bile yalnız ilk ihlalin
-`reason`'u döner.
+Adım 0 yalnız politikada `agent` bloğu varsa çalışır ve adım 1'den önce gelir. Adım 1–8'in
+sırası, verdict'i ve `reason` metni v1 ile (§5) birebir aynıdır; yalnız `reason_code` ve
+`matched_rule` eklenir.
+
+| Adım | Koşul | Verdict | `reason_code` | `matched_rule` | `reason` |
+|---|---|---|---|---|---|
+| 0a | `agent` yok ya da `agent.id == ""` | DENY | `AGENT_ID_MISSING` | `agent.id` | `agent identity missing` |
+| 0b | `agent.id` desenle eşleşmiyor | DENY | `AGENT_ID_MISMATCH` | `agent.id` | `agent identity does not match policy` |
+| 0c | `agent.runtime` listesi boş değil ve çağıranın runtime'ı `None` ya da listede yok | DENY | `AGENT_RUNTIME_NOT_ALLOWED` | `agent.runtime` | `agent runtime not allowed` |
+| 1 | `not (valid_from <= now < valid_until)` | DENY | `POLICY_NOT_ACTIVE` | `valid_from/valid_until` | `policy expired or not yet active` |
+| 2 | `now` bir blackout penceresinde | DENY | `BLACKOUT_WINDOW` | `blackout_windows[<i>]` | `inside blackout window[: <reason>]` |
+| 3 | hedef `scope.deny` ile eşleşiyor | DENY | `TARGET_DENIED` | `scope.deny[<i>]` (ilk eşleşen) | `target explicitly denied in scope` |
+| 4 | hedef hiçbir `scope.allow` ile eşleşmiyor | DENY | `TARGET_NOT_IN_SCOPE` | `scope.allow` | `target not in allowed scope` |
+| 5 | `action_type`, `actions.deny` içinde | DENY | `ACTION_DENIED` | `actions.deny` | `action type '<a>' explicitly denied` |
+| 6 | `action_type`, `approval_required_for` içinde | REQUIRES_APPROVAL | `APPROVAL_REQUIRED` | `approval_required_for` | `action type '<a>' requires human approval` |
+| 7 | `action_type`, `actions.allow` içinde | ALLOW | `ACTION_ALLOWED` | `actions.allow` | `action type '<a>' allowed` |
+| 8 | hiçbiri | DENY | `ACTION_NOT_ALLOWED` | boş dize (`""`) | `action type not explicitly allowed` |
+
+Eşleştirme kuralları:
+
+- `agent.id` glob'u `fnmatch.fnmatchcase` ile, büyük/küçük harfe duyarlı karşılaştırılır; `*` `/` karakterini de kapsar.
+- Scope eşleştirmesi v1 ile aynıdır: `cidr` yalnız IP literal hedefle eşleşir; `hostname` küçük harfe çevrilmiş dizelerde `fnmatchcase` kullanır ve ad çözülmez.
+- `action_type` tam ve büyük/küçük harfe duyarlı eşleşir.
 
 ### 14.5 enforce_egress
 
-`egress` bloğu, zorlayan platformun ağ katmanına politika verisi sağlar:
+İmzalar:
 
-- **HTTP(S) allowlist:** `egress.http.allow` girdileri host + port + protokol üçlüsüdür.
-  Platform, bu listeye uymayan CONNECT/SNI hedeflerini reddeder ve olay kaydeder.
-- **DNS resolver:** `egress.dns.resolvers` boş değilse platform DNS'i yalnız bu
-  çözücülere yönlendirir; boşsa platformun kendi resolver'ı kullanılır.
-- **Varsayılan:** `egress.default` yalnız `deny` olabilir. İzin verilmeyen her hedef
-  reddedilir; hiçbir durumda allowlist genişletilmez.
-- **Hostname hedefleri:** CIDR kuralları hostname hedeflerine uygulanmaz (§7); host
-  allowlist'i ad bazlı çalışır.
-- Bu blok bir **karar girdisidir**; ağ zorlamasının kendisi zorlayan platformun
-  (ör. sandbox altyapısının) sorumluluğundadır.
+- `enforce_egress(engagement, host, port, method=None, *, now=None, agent=None) -> Decision`.
+- `Engagement.check_egress(host, port, method=None, *, now=None, agent=None)`.
+
+Dönen `Decision`'da `target` = `host:port`'tur; IPv6 hedefte `[host]:port`. `action_type` =
+`egress`'tir; method verilmişse `egress:<METHOD>`.
+
+`scope` ve `actions` egress'e uygulanmaz. Sıra sabittir ve ilk eşleşme kazanır.
+
+| Adım | Koşul | Verdict | `reason_code` | `matched_rule` | `reason` |
+|---|---|---|---|---|---|
+| E0 | §14.4 adım 0 (yalnız `agent` bloğu varsa) | DENY | `AGENT_*` | §14.4 gibi | §14.4 gibi |
+| E1 | zaman penceresi dışı | DENY | `POLICY_NOT_ACTIVE` | `valid_from/valid_until` | `policy expired or not yet active` |
+| E2 | blackout | DENY | `BLACKOUT_WINDOW` | `blackout_windows[<i>]` | `inside blackout window[: <reason>]` |
+| E3 | host/port/method geçersiz | DENY | `EGRESS_TARGET_INVALID` | boş dize (`""`) | `egress target invalid` |
+| E4 | IMDS / link-local hedef | DENY | `EGRESS_IMDS_DENIED` | boş dize (`""`) | `egress to instance metadata or link-local address denied` |
+| E5 | politikada `egress` bloğu yok | DENY | `EGRESS_NOT_CONFIGURED` | `egress` | `egress not configured in policy` |
+| E6 | hedef bir `egress.http.deny` girdisiyle eşleşiyor | DENY | `EGRESS_HOST_DENIED` | `egress.http.deny[<i>]` | `egress host explicitly denied` |
+| E7 | hedef hiçbir `egress.http.allow` girdisiyle eşleşmiyor | DENY | `EGRESS_HOST_NOT_ALLOWED` | `egress.http.allow` | `egress host not allowed` |
+| E8 | hedefle eşleşen girdilerin hiçbirinde `port` yok | DENY | `EGRESS_PORT_NOT_ALLOWED` | hedefle eşleşen ilk girdi `egress.http.allow[<i>]` | `egress port not allowed` |
+| E9 | host ve port eşleşen girdilerin hepsinde `methods` var ve `method` `None` ya da listede yok | DENY | `EGRESS_METHOD_NOT_ALLOWED` | host+port eşleşen ilk girdi | `egress method not allowed` |
+| E10 | aksi halde | ALLOW | `EGRESS_ALLOWED` | tam eşleşen ilk girdi `egress.http.allow[<i>]` | `egress allowed` |
+
+**E3 doğrulaması:**
+
+- `host` boş olmayan bir `str` olmalıdır.
+- `ipaddress.ip_address(host)` başarılıysa hedef IP literal'dir. Köşeli parantezli yazım (`[2001:db8::1]`) geçersizdir.
+- Değilse hedef bir addır. Önce küçük harfe çevrilir ve sondaki tek `.` atılır. Toplam uzunluk 1–253 olmalıdır. Her etiket `^([a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])$` ile eşleşmelidir. Son etiket `^(0x[0-9a-f]*|[0-9]+)$` ile eşleşmemelidir. Bu kural, kanonik olmayan sayısal IP yazımlarının (tam sayı, sekizlik, onaltılık) ad olarak kabul edilmesini engeller.
+- `port` bool olmayan bir `int` olmalı ve 1..65535 aralığında kalmalıdır.
+- `method` `None` ya da boş olmayan bir `str` olmalıdır.
+
+**E4 listesi:**
+
+- `169.254.0.0/16`, `168.63.129.16`, `100.100.100.200`, `fe80::/10` ve `fd00:ec2::254`.
+- Eşlenen IPv4 adresi bu IPv4 girdilerinden birine düşen IPv4-mapped IPv6 adresler (`::ffff:169.254.x.y`, `::ffff:168.63.129.16`, `::ffff:100.100.100.200`).
+- Normalleştirilmiş ad `metadata.google.internal`.
+- Bu adım allow kurallarından önce gelir ve politika ne derse desin uygulanır.
+
+**Eşleştirme:**
+
+- `host` glob'ları yalnız ad hedefleriyle eşleşir; küçük harfe çevrilmiş dizelerde `fnmatchcase` kullanılır.
+- `cidr` girdileri yalnız IP literal hedeflerle eşleşir.
+- `methods` karşılaştırması tam ve büyük/küçük harfe duyarlıdır.
+- `egress.http` yoksa allow listesi boş sayılır ve sonuç E7 olur.
+
+**Ad çözümleme yapılmaz.** Zorlayan platform `enforce_egress`'i hem adla hem de bağlanılan IP ile
+çağırmalı ve ikisinin de ALLOW olmasını beklemelidir.
+
+`egress.dns` bloğu roe-guard'da yalnız doğrulanır. Semantiği platformun resolver'ı uygular:
+`deny` > `allow` > varsayılan DENY; `record_types` dışındaki sorgu tipi DENY.
 
 ### 14.6 Yeni alanlar ve uyumluluk kuralları
 
-- v2'de yeni bir blok ya da alan eklemek `MAX_SCHEMA_VERSION`'ı artırmayı gerektirmez;
-  alan v2'nin parçası olarak tanımlanır ve yükleyiciye eklenir.
-- v1 dosyalarına v2 blokları eklenemez (§14.1); bir v1 dosyasının v2'ye geçmesi
-  `schema_version: 2` satırının eklenmesiyle olur ve bilinmeyen anahtar kuralları o andan
-  itibaren uygulanır.
-- `null` liste değeri v1'deki gibi `[]` sayılır; v2'de `null` skaler değeri
-  `PolicyParseError`'dır.
-- `x-*` anahtarlarının içeriği hiçbir sürümde doğrulanmaz; üretici sorumluluğundadır.
-- Conformance vektörleri (§14.8) her iki sürümü de kapsar; bir sürümde davranış
-  değişirse vektör güncellenir ve changelog'a yazılır.
+- `ReasonCode(str, Enum)`: her üyenin değeri adıyla aynıdır. Üyeler §14.4 ve §14.5'teki 19 kod ile `POLICY_INVALID`'dir; toplam 20.
+- `POLICY_INVALID`'in anlamı: politika yüklenemedi. Çağıran taraf bu durumda her girdiyi DENY sayar ve bu durum observe modunda da engeller.
+- `parse_policy(raw: Mapping[str, Any]) -> Policy` dosyasız ayrıştırmadır. `load_policy(path)` dosyanın ham baytlarından `Policy.source_sha256` değerini de hesaplar.
+- `Decision`'a sona ve varsayılanla eklenen alanlar: `mode: EnforcementMode = ENFORCE`, `reason_code: str = ""`, `matched_rule: str = ""`, `agent_id: str = ""`.
+- `Policy`'ye sona ve varsayılanla eklenen alanlar: `schema_version=1`, `mode=ENFORCE`, `sandbox=None`, `approval=None`, `extensions={}`, `source_sha256=""`, `agent=None`, `egress=None`.
+- Uyumluluk kuralları:
+  - (a) Her geçerli v1 dosyası v2 kodunda aynı verdict'i ve aynı `reason`'ı üretir. Bunu altın conformance vektörleri kanıtlar.
+  - (b) Her yeni blok opsiyoneldir; blok yoksa davranış v1 ile aynıdır.
+  - (c) `DecisionType` üç üyede kalır. Yeni alanlar sona ve varsayılanla eklenir, konumsal kurulum bozulmaz.
+  - (d) Mevcut imzalar değişmez; yeni parametreler keyword-only'dir. Egress kontrolü ayrı bir fonksiyondur. 8 adımlı merdivendeki tek ek, opsiyonel adım 0'dır.
+  - (e) Audit v2 kayıtları §14.7'dedir. Karışık v1→v2 zincirleri doğrulanır.
+  - (f) JSON Schema dosyaları ve dil bağımsız conformance paketi §14.8'dedir. Başka dillerdeki değerlendiriciler aynı vektörleri geçmek zorundadır.
 
 ### 14.7 Audit kaydı v2
 
-v1 audit kaydının alanları korunur; şu alanlar **eklenir**:
+Dosya JSONL'dir ve UTF-8 kodludur. Her satır, kaydın (`entry_hash` dahil) JCS çıktısı ve
+ardından gelen `\n`'dir. Kayıtta tam olarak şu 16 anahtar bulunur:
 
-| Alan | Tip | Anlam |
-|---|---|---|
-| `schema_version` | int | Kayıt biçimi sürümü; v2 kayıtlarda `2`. |
-| `mode` | str | Karar anındaki mod (`enforce` / `observe`). |
-| `policy_id` | str | Karara giren politikanın `engagement_id`'si. |
-| `policy_sha256` | str | Ham politika baytlarının küçük harf hex SHA-256'sı. |
-| `action` | str | Verdict sonrası uygulanan aksiyon: `pass`, `block`, `hold`. |
-| `reason_code` | str | Makine-okunur kısa kod; serbest metin taşımaz. |
+| Alan | Kural |
+|---|---|
+| `v` | int, sabit `2` |
+| `seq` | int ≥ 0; zincirdeki kayıt sırası; v1 satırları da sayılır; 0'dan başlar, her kayıtta +1 |
+| `chain_id` | `^[A-Za-z0-9._:-]{1,128}$`; zincir boyunca sabit |
+| `timestamp` | `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$` (UTC, 6 hane kesir, `Z`); ham dize hash'lenir, yeniden ayrıştırılmaz |
+| `engagement_id` | boş olmayan dize |
+| `policy_sha256` | `^[0-9a-f]{64}$`; kararın verildiği politika dosyasının ham baytlarının SHA-256'sı (`Policy.source_sha256`) |
+| `mode` | `enforce` ya da `observe` |
+| `agent_id` | dize; kimlik yoksa `""` |
+| `target`, `action_type`, `reason`, `reason_code` | dize |
+| `decision` | `ALLOW`, `DENY` ya da `REQUIRES_APPROVAL` |
+| `metadata` | nesne (`{}` olabilir); değerleri JCS alt kümesindedir |
+| `prev_hash` | 64 küçük harf hex; ilk kayıtta `"0"*64`; karışık zincirde son v1 satırının `entry_hash`'i |
+| `entry_hash` | `sha256(JCS(kayıt − entry_hash))`, küçük harf hex |
 
-Kurallar:
+**JCS alt kümesi (RFC 8785):**
 
-- Zincir biçimi değişmez: her kayıt bir öncekinin `entry_hash`'ini taşır; `verify()`
-  tüm kayıtlar için çalışır.
-- `mode=observe` kayıtlarında `verdict=DENY` + `action=pass` birlikte görülebilir; bu
-  bir tutarsızlık değil, gözlem modunun tanımıdır.
-- Eski okuyucular yeni alanları yok sayabilir; yeni okuyucular eksik alanları
-  `schema_version: 1` kayıt olarak yorumlar.
+- İzinli değerler: dize, tamsayı (|n| ≤ 2^53−1), `true`, `false`, `null`, dize anahtarlı nesne, dizi. Kayan noktalı sayı yoktur.
+- Anahtarlar UTF-16 kod birimi sırasına göre sıralanır.
+- Kısa kaçışlar: `"`, `\\`, `\b`, `\t`, `\n`, `\f`, `\r`. Diğer U+0000–U+001F karakterleri `\u00xx` biçiminde (küçük hex) yazılır. Geri kalan karakterler ham UTF-8'dir.
+- Eşleşmemiş surrogate ve aynı nesnede yinelenen anahtar hatadır.
+
+**Tek yazıcı:**
+
+- `AuditLogV2` dosyayı `fcntl.flock(LOCK_EX | LOCK_NB)` ile kilitler. İkinci yazıcı `AuditWriterLockedError` alır. `fcntl` olmayan platformda yazıcı açılmaz (fail-closed).
+- Açılışta mevcut dosya baştan doğrulanır. Dosya geçersizse `AuditIntegrityError` fırlatılır ve hiçbir satır yazılmaz.
+- v1 `AuditLog.record()`, v2 satırı içeren bir zincire yazmayı reddeder (`AuditIntegrityError`).
+
+**Checkpoint:**
+
+- Dosya `<audit dosyası>.checkpoints.jsonl`'dir. Her satır tam olarak şu 7 anahtarı içeren nesnenin JCS çıktısıdır: `v` (2), `chain_id`, `seq` (kapsanan son kaydın `seq` değeri), `head_hash` (o kaydın `entry_hash`'i), `timestamp` (aynı biçim), `key_id`, `sig`.
+- `key_id` = `sha256:` + ham 32 bayt ed25519 açık anahtarın SHA-256 hex'i.
+- `sig`, `JCS(checkpoint − sig)` üzerinde ed25519 imzasıdır; padding'siz base64url, 86 karakter.
+- Yazıcı her `checkpoint_every` kayıtta (varsayılan 1000) ve kapanışta checkpoint üretir. Checkpoint'ten önce `fsync` yapılır.
+- İmza anahtarını çağıran sağlar. Anahtar saklama ve yayımlama roe-guard'ın kapsamı dışındadır.
+
+**Karışık zincir:** v1 satırlarından sonra v2 satırları gelebilir. v2 satırından sonra v1 satırı
+gelirse sonuç `VERSION_DOWNGRADE` olur.
+
+**Doğrulama sırası.** v2 satırı için sıra şudur:
+
+1. JSON ayrıştırma (`INVALID_JSON`).
+2. Yinelenen anahtar ya da eksik anahtar (`MALFORMED`).
+3. `v` ≠ 2 (`UNKNOWN_VERSION`).
+4. Fazla anahtar (`UNKNOWN_FIELD`).
+5. Tip ya da değer hatası (`MALFORMED`).
+6. Zaman biçimi (`TIMESTAMP_FORMAT`).
+7. `chain_id` değişti (`CHAIN_ID_MISMATCH`).
+8. `seq` ≠ kayıt sırası (`SEQ_MISMATCH`).
+9. `prev_hash` (`PREV_HASH_MISMATCH`).
+10. `entry_hash` (`ENTRY_HASH_MISMATCH`).
+
+Checkpoint için sıra şudur:
+
+1. Dosya yok (`CHECKPOINT_MISSING`).
+2. Biçim (`CHECKPOINT_MALFORMED`).
+3. `chain_id` (`CHAIN_ID_MISMATCH`).
+4. Bilinmeyen anahtar kimliği (`CHECKPOINT_KEY_UNKNOWN`).
+5. ed25519 desteği yok (`SIGNING_BACKEND_UNAVAILABLE`).
+6. İmza (`CHECKPOINT_SIGNATURE_INVALID`).
+7. `seq` ≥ kayıt sayısı (`CHAIN_TRUNCATED`).
+8. `head_hash` uyuşmuyor (`CHECKPOINT_HEAD_MISMATCH`).
+
+**Doğrulama sonucu:** `AuditVerificationResult` sona eklenen `reason_code: str | None = None`
+alanını taşır.
+
+**Bilinen sınır:** Son checkpoint'ten sonraki kayıtların kesilmesi tespit edilemez. Dış çıpa hâlâ
+açık karardır (§12).
 
 ### 14.8 JSON Schema ve conformance
 
-- `schemas/policy-v1.schema.json` ve `schemas/policy-v2.schema.json` üretilir; ikisi de
-  JSON Schema draft 2020-12'dir. v2 şeması §14.2 tablosundaki tüm alanları ve
-  §14.1'deki sürüm kurallarını içerir.
-- Şemalar editör otomatik-tamamlama için yayınlanır ve conformance vektörleriyle
-  birlikte sürümlenir.
-- Conformance vektörleri `(politika dosyası, girdi) → beklenen verdict + reason` üçlüsü
-  dür; her iki sürümün davranışını sabitler. Yükleyici ve karar motoru değişiklikleri bu
-  vektörleri geçmek zorundadır.
+- Dosyalar: `schema/policy.v1.json`, `schema/policy.v2.json`, `schema/audit-record.v2.json`, `schema/audit-checkpoint.v2.json`. Hepsi JSON Schema draft 2020-12'dir. Şema yapısaldır; tarih sırası, CIDR geçerliliği ve ISO-8601 ayrıştırması yalnız yükleyicide yapılır.
+- `conformance/cases/*.json` dosyalarının biçimi `{"format": 1, "suite": ..., "cases": [{id, description, policy, input, expected: {verdict, reason_code}}]}`.
+- `conformance/audit/` ve `conformance/jcs/` audit v2 ve JCS vektörlerini içerir.
+- Tüketiciler vektörleri roe-guard commit SHA'sıyla sabitler. Bilinmeyen `format` değeri tüketicide hatadır.
