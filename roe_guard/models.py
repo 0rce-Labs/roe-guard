@@ -113,6 +113,7 @@ class Policy:
         blackout_windows:       Time-ranges where everything is denied.
         approval_required_for:  Action types needing human approval.
         approvers:              Email/identifier list of authorised approvers.
+        schema_version:         Policy schema version (1 unless stated).
     """
 
     engagement_id: str
@@ -124,6 +125,7 @@ class Policy:
     blackout_windows: list[BlackoutWindow] = field(default_factory=list)
     approval_required_for: list[str] = field(default_factory=list)
     approvers: list[str] = field(default_factory=list)
+    schema_version: int = 1
 
 
 # ---------------------------------------------------------------------------
