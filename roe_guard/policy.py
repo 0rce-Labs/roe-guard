@@ -6,7 +6,8 @@ YAML policy loading and schema validation (spec §5).
 The public entry point is :func:`load_policy` (``MAX_SCHEMA_VERSION`` is the
 highest supported policy ``schema_version``), which:
     - reads a YAML file with ``yaml.safe_load`` (never ``yaml.load`` — RCE risk),
-    - rejects an unsupported ``schema_version`` before any other check,
+    - rejects an unsupported ``schema_version`` right after the top-level
+      mapping check, before the required-field checks,
     - validates the top-level structure against spec §5,
     - converts ISO-8601 timestamps to timezone-aware UTC datetimes,
     - validates every CIDR with :func:`ipaddress.ip_network`,

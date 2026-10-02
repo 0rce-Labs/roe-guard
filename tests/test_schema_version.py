@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from roe_guard.exceptions import PolicyParseError
-from roe_guard.policy import load_policy
+from roe_guard.policy import MAX_SCHEMA_VERSION, load_policy
 
 BASE = {
     "engagement_id": "sv-test",
@@ -52,9 +52,13 @@ def test_invalid_versions_rejected(tmp_path, value):
     with pytest.raises(PolicyParseError) as exc:
         load_policy(p)
     assert exc.value.field == "schema_version"
-    if value in (2, 99):
+    if (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and value > MAX_SCHEMA_VERSION
+    ):
         assert f"unsupported schema_version {value}" in str(exc.value)
-        assert "supports up to 1" in str(exc.value)
+        assert f"supports up to {MAX_SCHEMA_VERSION}" in str(exc.value)
 
 
 def test_version_checked_before_required_fields(tmp_path):
@@ -72,7 +76,7 @@ def test_cli_validate_rejects_unsupported(tmp_path, capsys):
     p = _write(tmp_path, data)
     assert main(["validate", p]) == 1
     _, err = capsys.readouterr()
-    assert "schema_version" in err
+    assert "unsupported schema_version 99" in err
 
 
 def test_cli_check_rejects_unsupported(tmp_path, capsys):
@@ -93,7 +97,7 @@ def test_cli_check_rejects_unsupported(tmp_path, capsys):
     ]
     assert main(args) == 1
     out, err = capsys.readouterr()
-    assert "schema_version" in err
+    assert "unsupported schema_version 99" in err
     assert "outcome" not in out.lower()
 
 
