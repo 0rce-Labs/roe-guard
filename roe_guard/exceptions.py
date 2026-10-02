@@ -107,7 +107,10 @@ class ApprovalRequiredError(RoeGuardError):
 
 
 class UnknownKeyWarning(UserWarning):
-    """A policy key was unknown and therefore ignored (v1 lax mode)."""
+    """A policy key was unknown and therefore ignored (v1 lax mode).
+
+    This is a warning category, not a :class:`RoeGuardError`.
+    """
 
 
 __all__ = [

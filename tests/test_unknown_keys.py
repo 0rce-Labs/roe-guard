@@ -85,7 +85,7 @@ def test_v2_never_defined_key_rejected(tmp_path):
     assert exc.value.field == "network"
 
 
-def test_v2_blocks_never_silently_dropped(tmp_path):
+def test_regression_v2_blocks_never_silently_dropped(tmp_path):
     """T20-T22 until then: either rejected (fail-closed) or fully parsed."""
     data = dict(
         BASE_V2,
@@ -132,3 +132,79 @@ def test_fixtures_load_without_warnings(name):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         load_policy(str(FIXTURES / name))
+
+
+@pytest.mark.parametrize(
+    ("raw_key", "field"), [("1", "1"), ("true", "True"), ("null", "None")]
+)
+def test_v2_non_str_root_key_rejected(tmp_path, raw_key, field):
+    p = tmp_path / "policy.yaml"
+    p.write_text(yaml.safe_dump(BASE_V2) + f"{raw_key}: x\n", encoding="utf-8")
+    with pytest.raises(PolicyParseError) as exc:
+        load_policy(str(p))
+    assert exc.value.field == field
+    assert "unknown key" in str(exc.value)
+
+
+def test_v2_non_str_key_in_scope_entry_rejected(tmp_path):
+    data = dict(BASE_V2, scope={"allow": [{"cidr": "10.0.0.0/8", 7: "x"}]})
+    p = _write(tmp_path, data)
+    with pytest.raises(PolicyParseError) as exc:
+        load_policy(p)
+    assert exc.value.field == "scope.allow[0].7"
+
+
+def test_v2_scope_level_unknown_key_rejected(tmp_path):
+    data = dict(BASE_V2, scope={"allow": [{"cidr": "10.0.0.0/8"}], "foo": 1})
+    p = _write(tmp_path, data)
+    with pytest.raises(PolicyParseError) as exc:
+        load_policy(p)
+    assert exc.value.field == "scope.foo"
+
+
+def test_v2_scope_deny_entry_unknown_key_rejected(tmp_path):
+    data = dict(
+        BASE_V2,
+        scope={
+            "allow": [{"cidr": "10.0.0.0/8"}],
+            "deny": [{"cidr": "10.1.0.0/16"}, {"cidr": "10.2.0.0/16", "note": "x"}],
+        },
+    )
+    p = _write(tmp_path, data)
+    with pytest.raises(PolicyParseError) as exc:
+        load_policy(p)
+    assert exc.value.field == "scope.deny[1].note"
+
+
+def test_v2_extension_keys_ignored_in_scope_and_blackout(tmp_path):
+    data = dict(
+        BASE_V2,
+        scope={"allow": [{"cidr": "10.0.0.0/8"}], "x-team": "a"},
+        blackout_windows=[
+            {
+                "start": "2026-10-01T01:00:00Z",
+                "end": "2026-10-01T02:00:00Z",
+                "x-ticket": "b",
+            }
+        ],
+    )
+    p = _write(tmp_path, data)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert load_policy(p).schema_version == 2
+
+
+def test_v1_nested_unknown_key_warned_with_path_at_caller(tmp_path):
+    data = dict(BASE, scope={"allow": [{"cidr": "10.0.0.0/8", "note": "x"}]})
+    p = _write(tmp_path, data)
+    with pytest.warns(UnknownKeyWarning, match=r"scope\.allow\[0\]\.note") as rec:
+        load_policy(p)
+    assert rec[0].filename == __file__
+
+
+def test_v1_reserved_key_reported_in_document_order(tmp_path):
+    p = tmp_path / "policy.yaml"
+    p.write_text(yaml.safe_dump(BASE) + "egress: {}\nmode: observe\n", encoding="utf-8")
+    with pytest.raises(PolicyParseError) as exc:
+        load_policy(str(p))
+    assert exc.value.field == "egress"
