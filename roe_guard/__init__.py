@@ -20,6 +20,7 @@ from roe_guard.exceptions import (
     PolicyExpiredError,
     PolicyParseError,
     RoeGuardError,
+    UnknownKeyWarning,
 )
 from roe_guard.integrations.context import window
 from roe_guard.integrations.decorator import guarded
@@ -57,6 +58,7 @@ __all__ = [
     "RoeGuardError",
     "Scope",
     "ScopeEntry",
+    "UnknownKeyWarning",
     "__version__",
     "enforce",
     "guarded",

@@ -36,6 +36,7 @@ EXPECTED_ALL = [
     "guarded",
     "load_policy",
     "raise_if_expired",
+    "UnknownKeyWarning",
     "window",
 ]
 

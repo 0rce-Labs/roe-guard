@@ -160,9 +160,11 @@ class Engagement:
         ``UnicodeDecodeError``) propagate unchanged.  In every failure case
         no :class:`Engagement` is created.
         """
-        from roe_guard.policy import load_policy
+        from roe_guard.policy import _load_policy
 
-        return cls(policy=load_policy(path))
+        # stacklevel 3: from_file -> _load_policy -> warnings.warn, so an
+        # UnknownKeyWarning points at the code that called from_file.
+        return cls(policy=_load_policy(path, _stacklevel=3))
 
     def check(
         self,

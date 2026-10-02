@@ -106,6 +106,13 @@ class ApprovalRequiredError(RoeGuardError):
         self.action_type = action_type
 
 
+class UnknownKeyWarning(UserWarning):
+    """A policy key was unknown and therefore ignored (v1 lax mode).
+
+    This is a warning category, not a :class:`RoeGuardError`.
+    """
+
+
 __all__ = [
     "ApprovalRequiredError",
     "AuditIntegrityError",
@@ -113,4 +120,5 @@ __all__ = [
     "PolicyExpiredError",
     "PolicyParseError",
     "RoeGuardError",
+    "UnknownKeyWarning",
 ]

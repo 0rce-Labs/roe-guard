@@ -12,6 +12,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - Optional `schema_version` policy field; unsupported or invalid versions are rejected with `PolicyParseError` (fail-closed).
 - `py.typed` marker (PEP 561) and a `mypy --strict` CI step.
 - CI enforces a line-coverage floor (`fail_under` in `pyproject.toml`).
+- Strict key validation for `schema_version: 2` policies (`x-*` extension keys allowed); v2-only blocks in v1 policies are rejected; `UnknownKeyWarning` for ignored v1 keys.
 
 ## [0.1.0a1] — Unreleased
 

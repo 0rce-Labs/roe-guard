@@ -44,7 +44,7 @@ def test_fixtures_default_to_one():
 
 @pytest.mark.parametrize(
     "value",
-    [2, 99, 0, -1, "1", True, 1.0, None],
+    [3, 99, 0, -1, "1", True, 1.0, None],
 )
 def test_invalid_versions_rejected(tmp_path, value):
     data = dict(BASE, schema_version=value)
@@ -120,7 +120,13 @@ def test_cli_check_allows_base(tmp_path, capsys):
     capsys.readouterr()
 
 
+def test_schema_version_two_loads(tmp_path):
+    data = dict(BASE, schema_version=2)
+    p = _write(tmp_path, data)
+    assert load_policy(p).schema_version == 2
+
+
 def test_max_schema_version_exported():
     from roe_guard import MAX_SCHEMA_VERSION
 
-    assert MAX_SCHEMA_VERSION == 1
+    assert MAX_SCHEMA_VERSION == 2
