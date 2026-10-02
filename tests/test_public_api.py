@@ -23,6 +23,7 @@ EXPECTED_ALL = [
     "DecisionType",
     "Engagement",
     "GENESIS_PREV_HASH",
+    "MAX_SCHEMA_VERSION",
     "OutOfScopeError",
     "Policy",
     "PolicyExpiredError",

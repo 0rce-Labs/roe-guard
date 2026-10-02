@@ -34,12 +34,13 @@ from roe_guard.models import (
     Scope,
     ScopeEntry,
 )
-from roe_guard.policy import load_policy
+from roe_guard.policy import MAX_SCHEMA_VERSION, load_policy
 
 __version__ = "0.1.0a1"
 
 __all__ = [
     "GENESIS_PREV_HASH",
+    "MAX_SCHEMA_VERSION",
     "ApprovalRequiredError",
     "AuditEntry",
     "AuditIntegrityError",
