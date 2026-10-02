@@ -219,12 +219,12 @@ Policy yükleme, karar motoru, hash-chain audit, decorator/context manager, CLI 
 | T16 | `py.typed` + mypy | PEP 561 `py.typed` işaretleyicisi; CI'da strict `mypy` adımı. |
 | T17 | Coverage eşiği | CI coverage `fail_under` eşiğini zorlar. |
 | T18 | Bu SPEC | Politika şeması v2 ve audit kaydı v2 sözleşmesi (§14). |
-| T19 | JSON Schema v1 + v2 | `schema/` altındaki JSON Schema dosyaları (§14.8). |
-| T20 | v2 yükleyici + `EnforcementMode` + `reason_code` | v2 blokları, `parse_policy`, `EnforcementMode`, `ReasonCode` ve yeni `Decision`/`Policy` alanları (§14.2, §14.3, §14.6). |
-| T21 | Agent kimlik adımı | Karar merdiveninde adım 0 ve `AgentIdentity` (§14.4). |
-| T22 | `enforce_egress` | `enforce_egress` ve `Engagement.check_egress` (§14.5). |
-| T23 | Conformance vektörleri | `conformance/` altındaki dil bağımsız vektörler (§14.8). |
-| T24 | Audit kaydı v2 | `AuditLogV2`, checkpoint'ler ve v2 zincir doğrulaması (§14.7). |
+| T19 | JSON Schema v1 + v2 | `schema/policy.v1.json` ve `schema/policy.v2.json` (§14.1, §14.2, §14.8). |
+| T20 | v2 yükleyici + `EnforcementMode` + `reason_code` | `mode`, `sandbox` ve `approval` blokları, kökteki `x-*` → `Policy.extensions`, `parse_policy`, `Policy.source_sha256`, `EnforcementMode`, `ReasonCode`'un ilk 9 üyesi (`POLICY_INVALID` ve adım 1–8 kodları), `Decision.mode`/`reason_code`/`matched_rule` (§14.2, §14.3, §14.6). `agent` ve `egress` blokları bu işte hâlâ reddedilir. |
+| T21 | Agent kimlik adımı | `agent` bloğu (`Policy.agent`), `AgentIdentity`, karar merdiveninde adım 0, üç `AGENT_*` kodu ve `Decision.agent_id` (§14.4, §14.6). |
+| T22 | `enforce_egress` | `egress` bloğu (`Policy.egress`), `enforce_egress`, `Engagement.check_egress` ve sekiz `EGRESS_*` kodu (§14.5, §14.6). |
+| T23 | Conformance vektörleri | `conformance/cases/` vektörleri, vaka şeması ve koşucu (§14.4–§14.6, §14.8). |
+| T24 | Audit kaydı v2 | `AuditLogV2`, JCS, checkpoint'ler, v2 zincir doğrulaması, `schema/audit-record.v2.json`, `schema/audit-checkpoint.v2.json`, `conformance/audit/` ve `conformance/jcs/` vektörleri (§14.7, §14.8). |
 
 ## 11. Marka ve Yayın Notları
 
@@ -259,6 +259,7 @@ aynen uygular. "Zorlayan platform", roe-guard kararlarını çalışma zamanınd
 - v1'de diğer bilinmeyen anahtarlar `UnknownKeyWarning` ile uyarılır ve yok sayılır.
 - v2'de her seviyede bilinmeyen anahtar `PolicyParseError` verir; `field` alanı noktalı yoldur (ör. `egress.http.allow[1].proto`).
 - `x-` ile başlayan anahtarlar her seviyede ve her sürümde yok sayılır. Kökteki `x-*` anahtarları `Policy.extensions` sözlüğüne konur. Üreticiye özgü alanlar yalnız `x-<üretici>` altında yaşar; roe-guard bunların içeriğini yorumlamaz.
+- §14'teki bütün düzenli ifadeler dizenin tamamına uygulanır (Python'da `re.fullmatch`). Sondaki satır sonu dahil fazladan karakter eşleşmeyi bozar.
 - Hata `field` kuralları: bilinmeyen anahtarda anahtarın yolu, eksik zorunlu anahtarda eksik anahtarın yolu (ör. `approval.timeout_seconds`), tip ya da değer hatasında değerin yolu (ör. `egress.http.allow[0].ports[0]`). v1'in mevcut `field` değerleri değişmez; ör. kökteki eksik alanlar için `<top>`.
 
 ### 14.2 v2 alanları
@@ -351,7 +352,7 @@ x-vendor:
 | `sandbox.credentials.max_ttl_seconds` | int | hayır | — | ≥ 1, bool değil |
 | `sandbox.imds` | str | hayır | `deny` | yalnız `deny` |
 | `egress.default` | str | hayır | `deny` | yalnız `deny` (fail-open ifade edilemez) |
-| `egress.http.allow[]` | nesne | hayır | `[]` | `host` (glob) ya da `cidr`'den tam olarak biri; `ports` zorunlu, en az 1 eleman, her biri 1..65535; `methods` opsiyonel, her biri `^[A-Z]+$` |
+| `egress.http.allow[]` | nesne | hayır | `[]` | `host` (glob) ya da `cidr`'den tam olarak biri; `ports` zorunlu, en az 1 eleman, her biri 1..65535; `methods` opsiyonel, verilirse en az 1 eleman, her biri `^[A-Z]+$` |
 | `egress.http.deny[]` | nesne | hayır | `[]` | `host` ya da `cidr`'den tam olarak biri |
 | `egress.dns.allow` / `.deny` | [str] | hayır | `[]` | boş olmayan alan adı glob'ları |
 | `egress.dns.record_types` | [str] | hayır | `[A, AAAA]` | `A`, `AAAA`, `CNAME`; tekrarsız, en az 1 |
@@ -401,6 +402,10 @@ sırası, verdict'i ve `reason` metni v1 ile (§5) birebir aynıdır; yalnız `r
 | 6 | `action_type`, `approval_required_for` içinde | REQUIRES_APPROVAL | `APPROVAL_REQUIRED` | `approval_required_for` | `action type '<a>' requires human approval` |
 | 7 | `action_type`, `actions.allow` içinde | ALLOW | `ACTION_ALLOWED` | `actions.allow` | `action type '<a>' allowed` |
 | 8 | hiçbiri | DENY | `ACTION_NOT_ALLOWED` | boş dize (`""`) | `action type not explicitly allowed` |
+
+Tablodaki `<a>`, `<i>` ve `<reason>` yer tutucudur. `'<a>'`, v1'deki gibi `action_type`'ın Python
+`repr()` çıktısıdır; `<reason>` blackout penceresinin `reason` değeridir ve boşsa `: <reason>` eki
+yazılmaz.
 
 Eşleştirme kuralları:
 
@@ -495,7 +500,7 @@ ardından gelen `\n`'dir. Kayıtta tam olarak şu 16 anahtar bulunur:
 | `target`, `action_type`, `reason`, `reason_code` | dize |
 | `decision` | `ALLOW`, `DENY` ya da `REQUIRES_APPROVAL` |
 | `metadata` | nesne (`{}` olabilir); değerleri JCS alt kümesindedir |
-| `prev_hash` | 64 küçük harf hex; ilk kayıtta `"0"*64`; karışık zincirde son v1 satırının `entry_hash`'i |
+| `prev_hash` | 64 küçük harf hex; önceki kaydın `entry_hash`'i; ilk kayıtta `"0"*64`; karışık zincirde ilk v2 kaydı için son v1 satırının `entry_hash`'i |
 | `entry_hash` | `sha256(JCS(kayıt − entry_hash))`, küçük harf hex |
 
 **JCS alt kümesi (RFC 8785):**
@@ -516,7 +521,7 @@ ardından gelen `\n`'dir. Kayıtta tam olarak şu 16 anahtar bulunur:
 - Dosya `<audit dosyası>.checkpoints.jsonl`'dir. Her satır tam olarak şu 7 anahtarı içeren nesnenin JCS çıktısıdır: `v` (2), `chain_id`, `seq` (kapsanan son kaydın `seq` değeri), `head_hash` (o kaydın `entry_hash`'i), `timestamp` (aynı biçim), `key_id`, `sig`.
 - `key_id` = `sha256:` + ham 32 bayt ed25519 açık anahtarın SHA-256 hex'i.
 - `sig`, `JCS(checkpoint − sig)` üzerinde ed25519 imzasıdır; padding'siz base64url, 86 karakter.
-- Yazıcı her `checkpoint_every` kayıtta (varsayılan 1000) ve kapanışta checkpoint üretir. Checkpoint'ten önce `fsync` yapılır.
+- Yazıcıya imzalayıcı verilmişse yazıcı her `checkpoint_every` kayıtta (varsayılan 1000) ve kapanışta checkpoint üretir. Checkpoint'ten önce `fsync` yapılır. İmzalayıcı yoksa checkpoint yazılmaz; zincir yalnız hash bağlarıyla korunur (§7 madde 2).
 - İmza anahtarını çağıran sağlar. Anahtar saklama ve yayımlama roe-guard'ın kapsamı dışındadır.
 
 **Karışık zincir:** v1 satırlarından sonra v2 satırları gelebilir. v2 satırından sonra v1 satırı
@@ -535,9 +540,9 @@ gelirse sonuç `VERSION_DOWNGRADE` olur.
 9. `prev_hash` (`PREV_HASH_MISMATCH`).
 10. `entry_hash` (`ENTRY_HASH_MISMATCH`).
 
-Checkpoint için sıra şudur:
+Checkpoint doğrulaması, doğrulayıcıya bir checkpoint dosyası yolu verildiğinde yapılır. Sıra şudur:
 
-1. Dosya yok (`CHECKPOINT_MISSING`).
+1. Verilen dosya yok (`CHECKPOINT_MISSING`).
 2. Biçim (`CHECKPOINT_MALFORMED`).
 3. `chain_id` (`CHAIN_ID_MISMATCH`).
 4. Bilinmeyen anahtar kimliği (`CHECKPOINT_KEY_UNKNOWN`).
