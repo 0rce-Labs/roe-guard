@@ -202,9 +202,25 @@ def test_v1_nested_unknown_key_warned_with_path_at_caller(tmp_path):
     assert rec[0].filename == __file__
 
 
-def test_v1_reserved_key_reported_in_document_order(tmp_path):
+@pytest.mark.parametrize(
+    ("tail", "first"),
+    [
+        ("egress: {}\nmode: observe\n", "egress"),
+        ("mode: observe\negress: {}\n", "mode"),
+    ],
+)
+def test_v1_reserved_key_reported_in_document_order(tmp_path, tail, first):
     p = tmp_path / "policy.yaml"
-    p.write_text(yaml.safe_dump(BASE) + "egress: {}\nmode: observe\n", encoding="utf-8")
+    p.write_text(yaml.safe_dump(BASE) + tail, encoding="utf-8")
     with pytest.raises(PolicyParseError) as exc:
         load_policy(str(p))
-    assert exc.value.field == "egress"
+    assert exc.value.field == first
+
+
+def test_v1_warning_points_at_from_file_caller(tmp_path):
+    from roe_guard import Engagement
+
+    p = _write(tmp_path, dict(BASE, foo=1))
+    with pytest.warns(UnknownKeyWarning) as rec:
+        Engagement.from_file(p)
+    assert rec[0].filename == __file__

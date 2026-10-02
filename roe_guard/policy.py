@@ -272,8 +272,8 @@ def load_policy(path: str | Path) -> Policy:
           checked before the required fields.
         - Keys per level: unknown keys (except ``x-*``) are rejected for
           ``schema_version >= 2`` with ``field`` set to the dotted path;
-          for v1 the keys ``mode``, ``agent``, ``sandbox``, ``egress`` and
-          ``approval`` are rejected and other unknown keys are ignored.
+          for v1 the top-level keys ``mode``, ``agent``, ``sandbox``, ``egress``
+          and ``approval`` are rejected and other unknown keys are ignored.
         - Required top-level fields (``engagement_id``, ``valid_from``,
           ``valid_until``, ``scope``).
         - ISO-8601 datetime format for all timestamps (timezone-aware UTC).
@@ -296,6 +296,13 @@ def load_policy(path: str | Path) -> Policy:
             missing fields, invalid dates, invalid CIDR, malformed YAML, or
             empty scope entry).
     """
+    # stacklevel 3: load_policy -> _load_policy -> warnings.warn, so the
+    # warning points at the code that called load_policy.
+    return _load_policy(path, _stacklevel=3)
+
+
+def _load_policy(path: str | Path, *, _stacklevel: int) -> Policy:
+    """Implementation of :func:`load_policy`; ``_stacklevel`` targets the user call site."""
     p = Path(path)
     if not p.exists():
         raise PolicyParseError(f"policy file not found: {p}", field=str(p))
@@ -364,7 +371,9 @@ def load_policy(path: str | Path) -> Policy:
                     ignored=ignored,
                 )
     for full in ignored:
-        warnings.warn(f"unknown key ignored: {full}", UnknownKeyWarning, stacklevel=2)
+        warnings.warn(
+            f"unknown key ignored: {full}", UnknownKeyWarning, stacklevel=_stacklevel
+        )
 
     # --- Required fields ------------------------------------------------
     missing = [f for f in _REQUIRED_TOP_LEVEL if f not in raw]
