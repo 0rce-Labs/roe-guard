@@ -1,0 +1,47 @@
+schema_version: 2
+engagement_id: "fx-valid_full"
+valid_from: "2026-10-01T00:00:00Z"
+valid_until: "2026-10-02T00:00:00Z"
+scope:
+  allow:
+    - hostname: "*.api.example.com"
+actions:
+  allow: ["tool.http.get"]
+mode: observe
+agent:
+  id: "spiffe://example.org/tenant/t1/agent/a1/sandbox/*"
+  runtime: [mcp]
+sandbox:
+  filesystem:
+    read: ["/workspace/**"]
+    write: ["/workspace/out/**"]
+    deny: ["/workspace/secrets/**"]
+  syscalls:
+    profile: "default"
+    deny: ["ptrace"]
+  resources:
+    pids_max: 256
+    memory_max: "2G"
+    cpu_max: "100000 100000"
+  credentials:
+    max_ttl_seconds: 900
+  imds: deny
+egress:
+  default: deny
+  http:
+    allow:
+      - host: "api.example.com"
+        ports: [443]
+        methods: [GET]
+      - cidr: "198.51.100.0/24"
+        ports: [443]
+    deny:
+      - host: "bad.example.com"
+  dns:
+    allow: ["*.example.com"]
+    record_types: [A, AAAA]
+approval:
+  timeout_seconds: 300
+  on_timeout: deny
+x-vendor:
+  tier: 1

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/0rce-Labs/roe-guard/main/schema/policy.v1.json",
+  "title": "roe-guard policy schema v1",
+  "type": "object",
+  "required": ["engagement_id", "valid_from", "valid_until", "scope"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "engagement_id": {"$ref": "#/$defs/nonEmptyString"},
+    "valid_from": {"$ref": "#/$defs/nonEmptyString"},
+    "valid_until": {"$ref": "#/$defs/nonEmptyString"},
+    "scope": {
+      "type": "object",
+      "properties": {
+        "allow": {"type": ["array", "null"], "items": {"$ref": "#/$defs/scopeEntry"}},
+        "deny": {"type": ["array", "null"], "items": {"$ref": "#/$defs/scopeEntry"}}
+      }
+    },
+    "actions": {
+      "type": ["object", "null"],
+      "properties": {
+        "allow": {"$ref": "#/$defs/nullableStringList"},
+        "deny": {"$ref": "#/$defs/nullableStringList"}
+      }
+    },
+    "blackout_windows": {
+      "type": ["array", "null"],
+      "items": {"$ref": "#/$defs/blackoutWindow"}
+    },
+    "approval_required_for": {"$ref": "#/$defs/nullableStringList"},
+    "approvers": {"$ref": "#/$defs/nullableStringList"}
+  },
+  "propertyNames": {
+    "not": {"enum": ["mode", "agent", "sandbox", "egress", "approval"]}
+  },
+  "$defs": {
+    "nonEmptyString": {"type": "string", "minLength": 1},
+    "nullableStringList": {"type": ["array", "null"], "items": {"$ref": "#/$defs/nonEmptyString"}},
+    "stringList": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}},
+    "scopeEntry": {
+      "type": "object",
+      "oneOf": [
+        {"required": ["cidr"], "not": {"required": ["hostname"]}},
+        {"required": ["hostname"], "not": {"required": ["cidr"]}}
+      ],
+      "properties": {
+        "cidr": {"$ref": "#/$defs/nonEmptyString"},
+        "hostname": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "blackoutWindow": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"$ref": "#/$defs/nonEmptyString"},
+        "end": {"$ref": "#/$defs/nonEmptyString"},
+        "reason": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

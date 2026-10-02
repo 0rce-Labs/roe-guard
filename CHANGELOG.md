@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- JSON Schema (draft 2020-12) files `schema/policy.v1.json` and `schema/policy.v2.json`.
+
 - Top-level public API exports (`from roe_guard import Engagement, guarded, ...`) and a working `Engagement.from_file()`.
 - Optional `schema_version` policy field; unsupported or invalid versions are rejected with `PolicyParseError` (fail-closed).
 - `py.typed` marker (PEP 561) and a `mypy --strict` CI step.

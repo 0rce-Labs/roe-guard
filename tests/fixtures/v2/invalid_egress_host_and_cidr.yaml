@@ -1,0 +1,16 @@
+schema_version: 2
+engagement_id: "fx-invalid-egress-host-cidr"
+valid_from: "2026-10-01T00:00:00Z"
+valid_until: "2026-10-02T00:00:00Z"
+scope:
+  allow:
+    - hostname: "*.api.example.com"
+actions:
+  allow: ["tool.http.get"]
+egress:
+  default: deny
+  http:
+    allow:
+      - host: "api.example.com"
+        cidr: "198.51.100.0/24"
+        ports: [443]
