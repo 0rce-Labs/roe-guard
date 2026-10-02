@@ -60,5 +60,12 @@ python_version = "3.10"
 strict = true
 files = ["roe_guard"]
 
+[tool.coverage.run]
+source = ["roe_guard"]
+
+[tool.coverage.report]
+fail_under = 93
+show_missing = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

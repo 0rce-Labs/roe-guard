@@ -32,7 +32,7 @@ jobs:
           python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" || pip install tomli
 
       - name: Run tests
-        run: pytest -q
+        run: pytest -q --cov=roe_guard --cov-report=term-missing
 
       - name: Ruff lint
         run: ruff check .
