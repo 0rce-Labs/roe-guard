@@ -3,8 +3,11 @@ roe_guard.policy
 
 YAML policy loading and schema validation (spec §5).
 
-The only public entry point is :func:`load_policy`, which:
+The public entry point is :func:`load_policy` (``MAX_SCHEMA_VERSION`` is the
+highest supported policy ``schema_version``), which:
     - reads a YAML file with ``yaml.safe_load`` (never ``yaml.load`` — RCE risk),
+    - rejects an unsupported ``schema_version`` right after the top-level
+      mapping check, before the required-field checks,
     - validates the top-level structure against spec §5,
     - converts ISO-8601 timestamps to timezone-aware UTC datetimes,
     - validates every CIDR with :func:`ipaddress.ip_network`,
@@ -184,6 +187,29 @@ def _parse_str_list(value: Any, *, field: str) -> list[str]:
 # Public API
 # ---------------------------------------------------------------------------
 
+MAX_SCHEMA_VERSION = 1
+
+
+def _parse_schema_version(raw: dict[str, Any]) -> int:
+    """Validate the optional ``schema_version`` key (fail-closed).
+
+    Missing means ``1``. Anything that is not an ``int`` in
+    ``[1, MAX_SCHEMA_VERSION]`` (bools explicitly excluded) raises
+    :class:`PolicyParseError` with ``field="schema_version"``.
+    """
+    v = raw.get("schema_version", 1)
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise PolicyParseError(
+            f"schema_version must be an integer, got {type(v).__name__}",
+            field="schema_version",
+        )
+    if v < 1 or v > MAX_SCHEMA_VERSION:
+        raise PolicyParseError(
+            f"unsupported schema_version {v} (this roe-guard supports up to {MAX_SCHEMA_VERSION})",
+            field="schema_version",
+        )
+    return v
+
 
 def load_policy(path: str | Path) -> Policy:
     """Load and validate a policy from a YAML file (spec §5).
@@ -191,6 +217,8 @@ def load_policy(path: str | Path) -> Policy:
     Uses ``yaml.safe_load`` (never ``yaml.load``) to eliminate RCE risk.
 
     Validates:
+        - ``schema_version`` (optional int in ``[1, MAX_SCHEMA_VERSION]``),
+          checked before the required fields.
         - Required top-level fields (``engagement_id``, ``valid_from``,
           ``valid_until``, ``scope``).
         - ISO-8601 datetime format for all timestamps (timezone-aware UTC).
@@ -205,8 +233,9 @@ def load_policy(path: str | Path) -> Policy:
 
     Raises:
         roe_guard.exceptions.PolicyParseError: On any structural or
-            semantic validation failure (missing fields, invalid dates,
-            invalid CIDR, malformed YAML, or empty scope entry).
+            semantic validation failure (unsupported ``schema_version``,
+            missing fields, invalid dates, invalid CIDR, malformed YAML, or
+            empty scope entry).
     """
     p = Path(path)
     if not p.exists():
@@ -225,6 +254,9 @@ def load_policy(path: str | Path) -> Policy:
             f"top-level YAML must be a mapping, got {type(raw).__name__}",
             field=str(p),
         )
+
+    # --- Schema version (before required fields; fail-closed) -----------
+    schema_version = _parse_schema_version(raw)
 
     # --- Required fields ------------------------------------------------
     missing = [f for f in _REQUIRED_TOP_LEVEL if f not in raw]
@@ -287,7 +319,8 @@ def load_policy(path: str | Path) -> Policy:
         blackout_windows=blackout_windows,
         approval_required_for=approval_required_for,
         approvers=approvers,
+        schema_version=schema_version,
     )
 
 
-__all__ = ["load_policy"]
+__all__ = ["MAX_SCHEMA_VERSION", "load_policy"]
