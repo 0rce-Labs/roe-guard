@@ -17,7 +17,9 @@ FIXTURE = (
 )
 
 NOW = datetime(2026, 8, 10, 12, 0, 0, tzinfo=timezone.utc)
-BLACKOUT = datetime(2026, 8, 15, 6, 0, 0, tzinfo=timezone.utc)
+BLACKOUT = datetime(
+    2026, 8, 15, 0, 0, 0, tzinfo=timezone.utc
+)  # window start, inclusive
 
 TARGET_DENIED = "10.20.5.10"
 TARGET_OUT_OF_SCOPE = "203.0.113.7"
@@ -124,3 +126,74 @@ def test_mode_defaults_on_decision():
     )
     assert d.mode is EnforcementMode.ENFORCE
     assert isinstance(d.reason_code, str) and d.reason_code
+
+
+def test_reason_code_names():
+    assert {m.name for m in ReasonCode} == {
+        "POLICY_INVALID",
+        "POLICY_NOT_ACTIVE",
+        "BLACKOUT_WINDOW",
+        "TARGET_DENIED",
+        "TARGET_NOT_IN_SCOPE",
+        "ACTION_DENIED",
+        "APPROVAL_REQUIRED",
+        "ACTION_ALLOWED",
+        "ACTION_NOT_ALLOWED",
+    }
+
+
+def test_scope_deny_matched_rule_is_first_match(policy):
+    from dataclasses import replace
+
+    from roe_guard.models import Scope, ScopeEntry
+
+    scope = Scope(
+        allow=policy.scope.allow,
+        deny=[ScopeEntry(cidr="10.20.5.0/24"), ScopeEntry(cidr="10.20.0.0/16")],
+    )
+    d = enforce(
+        Engagement(policy=replace(policy, scope=scope)), TARGET_DENIED, "recon", now=NOW
+    )
+    assert d.reason_code == ReasonCode.TARGET_DENIED.value
+    assert d.matched_rule == "scope.deny[0]"
+
+
+def test_model_defaults_fail_closed():
+    from roe_guard import ApprovalSpec, SandboxSpec
+    from roe_guard.models import Policy, Scope
+
+    assert SandboxSpec().imds == "deny"
+    assert ApprovalSpec(1).on_timeout == "deny"
+    p = Policy(
+        engagement_id="e",
+        valid_from=NOW,
+        valid_until=BLACKOUT,
+        scope=Scope(allow=[], deny=[]),
+        actions_allow=[],
+        actions_deny=[],
+        blackout_windows=[],
+        approval_required_for=[],
+        approvers=[],
+    )
+    assert p.mode is EnforcementMode.ENFORCE
+    assert p.schema_version == 1 and p.source_sha256 == ""
+
+
+def test_new_fields_are_appended():
+    from dataclasses import fields
+
+    from roe_guard.models import Decision, Policy
+
+    assert [f.name for f in fields(Policy)][9:] == [
+        "schema_version",
+        "mode",
+        "sandbox",
+        "approval",
+        "extensions",
+        "source_sha256",
+    ]
+    assert [f.name for f in fields(Decision)][5:] == [
+        "mode",
+        "reason_code",
+        "matched_rule",
+    ]

@@ -56,30 +56,31 @@ def test_manifest_block_loading(name):
 
 @pytest.mark.parametrize("name", sorted(MANIFEST_DATA))
 def test_manifest_schema_decision_matches_loader(name):
-    """Manifest validity equals loader decision for every relevant fixture.
+    """Schema and loader agree on every relevant fixture.
 
-    loader_only entries are valid: false in the manifest AND rejected by the
-    loader, while the JSON Schema accepts them (sixth-round note).
+    loader_only entries are valid: false in the manifest: the loader rejects
+    them while the JSON Schema accepts them (date order, CIDR validity;
+    SPEC §14.8).
     """
     entry = MANIFEST_DATA[name]
     if entry["block"] not in RELEVANT_BLOCKS:
         return
-    if entry.get("loader_only"):
+    # Import lazily so the schema test module stays the schema owner.
+    import yaml
+
+    from tests.test_json_schema import validate
+
+    with open(_fixture(name), encoding="utf-8") as fh:
+        document = yaml.safe_load(fh)
+    errors = validate(document)
+    if entry["loader_only"]:
+        assert errors == [], name
         with pytest.raises(PolicyParseError):
             _load(name)
+    elif entry["valid"]:
+        assert errors == [], name
     else:
-        # Import lazily so the schema test module stays the schema owner.
-        import yaml
-
-        from tests.test_json_schema import validate
-
-        with open(_fixture(name), encoding="utf-8") as fh:
-            document = yaml.safe_load(fh)
-        errors = validate(document)
-        if entry["valid"]:
-            assert errors == [], name
-        else:
-            assert errors, name
+        assert errors, name
 
 
 # --- (b) mode ----------------------------------------------------------------
@@ -209,26 +210,38 @@ def test_parse_policy_has_empty_sha():
 # --- (g) unknown v2 blocks fail closed in this ticket ------------------------
 
 
-def test_agent_block_rejected_until_t21():
-    with pytest.raises(PolicyParseError) as exc:
-        _load("valid_agent.yaml")
-    assert exc.value.field == "agent"
-
-
-def test_egress_block_rejected_until_t22():
-    with pytest.raises(PolicyParseError) as exc:
-        _load("valid_egress.yaml")
-    assert exc.value.field == "egress"
+@pytest.mark.parametrize(
+    ("name", "block"), [("valid_agent.yaml", "agent"), ("valid_egress.yaml", "egress")]
+)
+def test_unparsed_block_never_dropped(name, block):
+    # Either rejected with field == block (until T21/T22) or loaded with the
+    # block present (after); loaded without the block must never happen.
+    try:
+        policy = _load(name)
+    except PolicyParseError as exc:
+        assert exc.field == block
+    else:
+        assert getattr(policy, block, None) is not None
 
 
 # --- (h) observe mode is still fail-closed -----------------------------------
 
 
 def test_observe_deny_and_guarded_raises():
-    policy = _load("valid_mode_observe.yaml")
+    from dataclasses import replace
+    from datetime import datetime, timedelta, timezone
+
+    # The window must contain the real clock: guarded() calls enforce() with now=None.
+    now = datetime.now(timezone.utc)
+    policy = replace(
+        _load("valid_mode_observe.yaml"),
+        valid_from=now - timedelta(days=1),
+        valid_until=now + timedelta(days=1),
+    )
     engagement = Engagement(policy=policy)
     decision = enforce(engagement, "203.0.113.7", "tool.http.get")
     assert decision.outcome is DecisionType.DENY
+    assert decision.reason_code == "TARGET_NOT_IN_SCOPE"
     assert decision.mode is EnforcementMode.OBSERVE
 
     calls = {"count": 0}
@@ -249,8 +262,19 @@ def test_observe_deny_and_guarded_raises():
 def test_invalid_utf8_rejected(tmp_path):
     bad = tmp_path / "bad.yaml"
     bad.write_bytes(b"\xff\xfe")
-    with pytest.raises(PolicyParseError):
+    with pytest.raises(PolicyParseError) as exc:
         load_policy(bad)
+    assert exc.value.field == str(bad)
+
+
+def test_invalid_utf8_byte_in_valid_policy_rejected(tmp_path):
+    # A valid policy with one stray byte must not load (no lenient decoding).
+    bad = tmp_path / "stray.yaml"
+    bad.write_bytes(_fixture("valid_minimal.yaml").read_bytes() + b"# \xff\n")
+    with pytest.raises(PolicyParseError) as exc:
+        load_policy(bad)
+    assert exc.value.field == str(bad)
+    assert "UTF-8" in str(exc.value)
 
 
 # --- (j) positional Decision still works -------------------------------------
@@ -266,3 +290,192 @@ def test_decision_positional_construction():
     assert d.reason_code == ""
     assert d.matched_rule == ""
     assert d.mode is EnforcementMode.ENFORCE
+
+
+# --- fail-closed details (SPEC §14.1, §14.2) --------------------------------
+
+
+def _doc(name="valid_minimal.yaml"):
+    import yaml
+
+    with open(_fixture(name), encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def _field_of(document):
+    with pytest.raises(PolicyParseError) as exc:
+        parse_policy(document)
+    return exc.value.field
+
+
+@pytest.mark.parametrize(
+    ("patch", "field"),
+    [
+        ({"sandbox": {"foo": 1}}, "sandbox.foo"),
+        ({"sandbox": {"filesytem": {"read": ["/"]}}}, "sandbox.filesytem"),
+        ({"sandbox": {"schema_version": "x"}}, "sandbox.schema_version"),
+        ({"sandbox": {"filesystem": {"foo": 1}}}, "sandbox.filesystem.foo"),
+        ({"sandbox": {"syscalls": {"foo": 1}}}, "sandbox.syscalls.foo"),
+        ({"sandbox": {"resources": {"foo": 1}}}, "sandbox.resources.foo"),
+        ({"sandbox": {"credentials": {"foo": 1}}}, "sandbox.credentials.foo"),
+        ({"approval": {"timeout_seconds": 60, "foo": 1}}, "approval.foo"),
+    ],
+)
+def test_v2_unknown_key_in_new_blocks_rejected(patch, field):
+    document = _doc()
+    document.update(patch)
+    assert _field_of(document) == field
+
+
+def test_v2_x_keys_allowed_in_new_blocks():
+    document = _doc()
+    document["sandbox"] = {"x-note": "n", "filesystem": {"x-note": "n"}}
+    document["approval"] = {"timeout_seconds": 60, "x-note": "n"}
+    assert parse_policy(document).sandbox is not None
+
+
+@pytest.mark.parametrize(
+    ("patch", "field"),
+    [
+        ({"actions": []}, "actions"),
+        ({"actions": ""}, "actions"),
+        ({"actions": False}, "actions"),
+        (
+            {"scope": {"allow": [{"hostname": "*.api.example.com"}], "deny": {}}},
+            "scope.deny",
+        ),
+        ({"scope": {"allow": ""}}, "scope.allow"),
+        ({"blackout_windows": ""}, "blackout_windows"),
+        ({"blackout_windows": {}}, "blackout_windows"),
+        (
+            {
+                "blackout_windows": [
+                    {
+                        "start": "2026-10-01T01:00:00Z",
+                        "end": "2026-10-01T02:00:00Z",
+                        "reason": 0,
+                    }
+                ]
+            },
+            "blackout_windows[0].reason",
+        ),
+        ({"approval_required_for": ""}, "approval_required_for"),
+        ({"approvers": {}}, "approvers"),
+        ({"scope": None}, "scope"),
+    ],
+)
+def test_v2_v1_fields_reject_wrong_types(patch, field):
+    document = _doc()
+    document.update(patch)
+    assert _field_of(document) == field
+
+
+def test_v2_v1_fields_accept_null():
+    for key in ("actions", "blackout_windows", "approval_required_for", "approvers"):
+        document = _doc()
+        document[key] = None
+        assert parse_policy(document).schema_version == 2, key
+    document = _doc()
+    document["scope"] = {"allow": None, "deny": None}
+    assert parse_policy(document).scope.allow == []
+
+
+def test_v1_keeps_falsy_coercion():
+    # SPEC §14.6 a: v1 behaviour is unchanged.
+    import yaml
+
+    with open(
+        REPO / "tests" / "fixtures" / "valid_policy.yaml", encoding="utf-8"
+    ) as fh:
+        document = yaml.safe_load(fh)
+    document["actions"] = []
+    document["blackout_windows"] = ""
+    policy = parse_policy(document)
+    assert policy.actions_allow == [] and policy.blackout_windows == []
+
+
+@pytest.mark.parametrize("value", [None, [], "x", 5, b"x"])
+def test_parse_policy_rejects_non_mapping(value):
+    with pytest.raises(PolicyParseError) as exc:
+        parse_policy(value)
+    assert exc.value.field == "<top>"
+
+
+def test_mode_null_rejected():
+    document = _doc()
+    document["mode"] = None
+    assert _field_of(document) == "mode"
+
+
+@pytest.mark.parametrize(
+    ("block", "key"),
+    [("syscalls", "profile"), ("resources", "memory_max"), ("resources", "cpu_max")],
+)
+def test_sandbox_string_fields_reject_null(block, key):
+    document = _doc()
+    document["sandbox"] = {block: {key: None}}
+    assert _field_of(document) == f"sandbox.{block}.{key}"
+
+
+@pytest.mark.parametrize("value", [True, 256.0, 0, -1, "1", None])
+@pytest.mark.parametrize(
+    ("patch_path", "field"),
+    [
+        (("sandbox", "resources", "pids_max"), "sandbox.resources.pids_max"),
+        (
+            ("sandbox", "credentials", "max_ttl_seconds"),
+            "sandbox.credentials.max_ttl_seconds",
+        ),
+        (("approval", "timeout_seconds"), "approval.timeout_seconds"),
+    ],
+)
+def test_int_fields_reject_bool_float_and_non_positive(value, patch_path, field):
+    document = _doc()
+    if patch_path[0] == "sandbox":
+        document["sandbox"] = {patch_path[1]: {patch_path[2]: value}}
+    else:
+        document["approval"] = {patch_path[1]: value}
+    assert _field_of(document) == field
+
+
+@pytest.mark.parametrize(
+    ("patch", "field"),
+    [
+        ({"sandbox": None}, "sandbox"),
+        ({"approval": None}, "approval"),
+        ({"sandbox": {"filesystem": None}}, "sandbox.filesystem"),
+        ({"sandbox": {"syscalls": None}}, "sandbox.syscalls"),
+        ({"sandbox": {"resources": None}}, "sandbox.resources"),
+        ({"sandbox": {"credentials": None}}, "sandbox.credentials"),
+        ({"sandbox": {"filesystem": {"read": None}}}, "sandbox.filesystem.read"),
+        ({"sandbox": {"syscalls": {"deny": None}}}, "sandbox.syscalls.deny"),
+        ({"sandbox": {"imds": "allow"}}, "sandbox.imds"),
+        (
+            {"approval": {"timeout_seconds": 60, "on_timeout": "allow"}},
+            "approval.on_timeout",
+        ),
+    ],
+)
+def test_v2_null_blocks_and_values_rejected(patch, field):
+    document = _doc()
+    document.update(patch)
+    assert _field_of(document) == field
+
+
+def test_parse_policy_warning_points_at_caller():
+    import warnings
+
+    import yaml
+
+    from roe_guard.exceptions import UnknownKeyWarning
+
+    with open(
+        REPO / "tests" / "fixtures" / "valid_policy.yaml", encoding="utf-8"
+    ) as fh:
+        document = yaml.safe_load(fh)
+    document["unknown_v1_key"] = 1
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        parse_policy(document)
+    hits = [w for w in caught if issubclass(w.category, UnknownKeyWarning)]
+    assert hits and hits[0].filename == __file__

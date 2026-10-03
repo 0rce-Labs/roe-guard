@@ -26,6 +26,7 @@ import hashlib
 import ipaddress
 import re
 import warnings
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -133,11 +134,23 @@ def _parse_scope_entry(entry: Any, *, field_prefix: str, index: int) -> ScopeEnt
     )
 
 
-def _parse_scope(scope: Any) -> Scope:
+def _v2_nullable(value: Any, expected: type, *, field: str, what: str) -> None:
+    """v2 only: a v1 field is either null or of its v1 type (no falsy coercion)."""
+    if value is not None and not isinstance(value, expected):
+        raise PolicyParseError(
+            f"'{field}' must be {what} or null, got {type(value).__name__}",
+            field=field,
+        )
+
+
+def _parse_scope(scope: Any, *, strict: bool = False) -> Scope:
     if not isinstance(scope, dict):
         raise PolicyParseError(
             f"'scope' must be a mapping, got {type(scope).__name__}", field="scope"
         )
+    if strict:
+        for key in ("allow", "deny"):
+            _v2_nullable(scope.get(key), list, field=f"scope.{key}", what="a list")
     allow_raw = scope.get("allow", []) or []
     deny_raw = scope.get("deny", []) or []
     if not isinstance(allow_raw, list):
@@ -156,7 +169,9 @@ def _parse_scope(scope: Any) -> Scope:
     return Scope(allow=allow, deny=deny)
 
 
-def _parse_blackout_window(bw: Any, *, index: int) -> BlackoutWindow:
+def _parse_blackout_window(
+    bw: Any, *, index: int, strict: bool = False
+) -> BlackoutWindow:
     field = f"blackout_windows[{index}]"
     if not isinstance(bw, dict):
         raise PolicyParseError(
@@ -175,6 +190,8 @@ def _parse_blackout_window(bw: Any, *, index: int) -> BlackoutWindow:
             f"({end.isoformat()})",
             field=field,
         )
+    if strict:
+        _v2_nullable(bw.get("reason"), str, field=field + ".reason", what="a string")
     reason = bw.get("reason", "") or ""
     if not isinstance(reason, str):
         raise PolicyParseError(
@@ -327,7 +344,7 @@ def load_policy(path: str | Path) -> Policy:
     return _load_policy(path, _stacklevel=3)
 
 
-def parse_policy(raw: dict[str, Any]) -> Policy:
+def parse_policy(raw: Mapping[str, Any]) -> Policy:
     """Validate an already-parsed policy mapping and build the Policy.
 
     All structural validation lives here; :func:`load_policy` only reads
@@ -335,11 +352,16 @@ def parse_policy(raw: dict[str, Any]) -> Policy:
 
     Raises:
         roe_guard.exceptions.PolicyParseError: On any structural or
-            semantic validation failure.
+            semantic validation failure, including input that is not a
+            mapping (``field="<top>"``).
     """
-    # parse_policy callers receive warnings with the default stacklevel:
-    # _parse_policy -> warnings.warn is one frame deep.
-    return _parse_policy(raw, _stacklevel=2)
+    if not isinstance(raw, Mapping):
+        raise PolicyParseError(
+            f"policy must be a mapping, got {type(raw).__name__}", field="<top>"
+        )
+    # stacklevel 3: parse_policy -> _parse_policy -> warnings.warn, so the
+    # warning points at the code that called parse_policy.
+    return _parse_policy(dict(raw), _stacklevel=3)
 
 
 def _load_policy(path: str | Path, *, _stacklevel: int) -> Policy:
@@ -465,9 +487,15 @@ def _parse_policy(raw: dict[str, Any], *, _stacklevel: int) -> Policy:
             f"'scope' must be a mapping, got {type(raw['scope']).__name__}",
             field="scope",
         )
-    scope = _parse_scope(raw["scope"])
+    scope = _parse_scope(raw["scope"], strict=strict)
 
     # --- Optional fields (default to empty) ----------------------------
+    # v2 accepts null or the v1 type; v1 keeps its falsy coercion (SPEC §14.6 a).
+    if strict:
+        _v2_nullable(raw.get("actions"), dict, field="actions", what="a mapping")
+        _v2_nullable(
+            raw.get("blackout_windows"), list, field="blackout_windows", what="a list"
+        )
     actions = raw.get("actions", {}) or {}
     if not isinstance(actions, dict):
         raise PolicyParseError(
@@ -484,7 +512,8 @@ def _parse_policy(raw: dict[str, Any], *, _stacklevel: int) -> Policy:
             field="blackout_windows",
         )
     blackout_windows = [
-        _parse_blackout_window(bw, index=i) for i, bw in enumerate(blackout_raw)
+        _parse_blackout_window(bw, index=i, strict=strict)
+        for i, bw in enumerate(blackout_raw)
     ]
 
     approval_required_for = _parse_str_list(
@@ -494,7 +523,7 @@ def _parse_policy(raw: dict[str, Any], *, _stacklevel: int) -> Policy:
 
     # --- mode (v2; default enforce) --------------------------------------
     mode_raw = raw.get("mode")
-    if mode_raw is None or mode_raw == "enforce":
+    if "mode" not in raw or mode_raw == "enforce":
         mode = EnforcementMode.ENFORCE
     elif mode_raw == "observe":
         mode = EnforcementMode.OBSERVE
@@ -575,7 +604,7 @@ def _parse_sandbox(raw: Any) -> SandboxSpec:
         raw,
         _SANDBOX_KEYS,
         path="sandbox",
-        strict=raw.get("schema_version", 1) >= 2,
+        strict=True,  # sandbox only parses in v2; v1 rejects the key earlier
         ignored=[],
     )
     filesystem = None
@@ -610,7 +639,7 @@ def _parse_sandbox(raw: Any) -> SandboxSpec:
             )
         _check_keys(sc, _SYSCALL_KEYS, path="sandbox.syscalls", strict=True, ignored=[])
         profile = sc.get("profile")
-        if profile is not None and (not isinstance(profile, str) or not profile):
+        if "profile" in sc and (not isinstance(profile, str) or not profile):
             raise PolicyParseError(
                 f"'sandbox.syscalls.profile' must be a non-empty string, got {profile!r}",
                 field="sandbox.syscalls.profile",
@@ -638,15 +667,13 @@ def _parse_sandbox(raw: Any) -> SandboxSpec:
             else None
         )
         memory_max = rs.get("memory_max")
-        if memory_max is not None and (
-            not isinstance(memory_max, str) or not memory_max
-        ):
+        if "memory_max" in rs and (not isinstance(memory_max, str) or not memory_max):
             raise PolicyParseError(
                 f"'sandbox.resources.memory_max' must be a non-empty string, got {memory_max!r}",
                 field="sandbox.resources.memory_max",
             )
         cpu_max = rs.get("cpu_max")
-        if cpu_max is not None and (not isinstance(cpu_max, str) or not cpu_max):
+        if "cpu_max" in rs and (not isinstance(cpu_max, str) or not cpu_max):
             raise PolicyParseError(
                 f"'sandbox.resources.cpu_max' must be a non-empty string, got {cpu_max!r}",
                 field="sandbox.resources.cpu_max",

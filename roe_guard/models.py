@@ -243,11 +243,10 @@ class Engagement:
         """Load a policy from a YAML file and return an :class:`Engagement`.
 
         Raises :class:`roe_guard.exceptions.PolicyParseError` if the file
-        does not exist, is not valid YAML, or fails policy validation (see
-        :func:`roe_guard.policy.load_policy`).  Other OS or decoding errors
-        (e.g. ``IsADirectoryError``, ``PermissionError``,
-        ``UnicodeDecodeError``) propagate unchanged.  In every failure case
-        no :class:`Engagement` is created.
+        does not exist, is not valid UTF-8 or YAML, or fails policy
+        validation (see :func:`roe_guard.policy.load_policy`).  Other OS
+        errors (e.g. ``IsADirectoryError``, ``PermissionError``) propagate
+        unchanged.  In every failure case no :class:`Engagement` is created.
         """
         from roe_guard.policy import _load_policy
 
