@@ -22,7 +22,9 @@ All failures raise :class:`~roe_guard.exceptions.PolicyParseError`.
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
+import re
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,7 +33,19 @@ from typing import Any
 import yaml
 
 from roe_guard.exceptions import PolicyParseError, UnknownKeyWarning
-from roe_guard.models import BlackoutWindow, Policy, Scope, ScopeEntry
+from roe_guard.models import (
+    ApprovalSpec,
+    BlackoutWindow,
+    CredentialSpec,
+    EnforcementMode,
+    FilesystemSpec,
+    Policy,
+    ResourceSpec,
+    SandboxSpec,
+    Scope,
+    ScopeEntry,
+    SyscallSpec,
+)
 
 _REQUIRED_TOP_LEVEL = ("engagement_id", "valid_from", "valid_until", "scope")
 
@@ -205,6 +219,9 @@ _TOP_KEYS = frozenset(
         "approval_required_for",
         "approvers",
         "schema_version",
+        "mode",
+        "sandbox",
+        "approval",
     }
 )
 _V2_RESERVED_TOP = frozenset({"mode", "agent", "sandbox", "egress", "approval"})
@@ -212,6 +229,15 @@ _SCOPE_KEYS = frozenset({"allow", "deny"})
 _SCOPE_ENTRY_KEYS = frozenset({"cidr", "hostname"})
 _ACTIONS_KEYS = frozenset({"allow", "deny"})
 _BLACKOUT_KEYS = frozenset({"start", "end", "reason"})
+_SANDBOX_KEYS = frozenset(
+    {"filesystem", "syscalls", "resources", "credentials", "imds"}
+)
+_FILESYSTEM_KEYS = frozenset({"read", "write", "deny"})
+_SYSCALL_KEYS = frozenset({"profile", "deny"})
+_RESOURCE_KEYS = frozenset({"pids_max", "memory_max", "cpu_max"})
+_CREDENTIAL_KEYS = frozenset({"max_ttl_seconds"})
+_APPROVAL_KEYS = frozenset({"timeout_seconds", "on_timeout"})
+_INT_VALUE_RE = re.compile(r"^[0-9]+$", re.ASCII)
 
 
 def _check_keys(
@@ -301,15 +327,38 @@ def load_policy(path: str | Path) -> Policy:
     return _load_policy(path, _stacklevel=3)
 
 
+def parse_policy(raw: dict[str, Any]) -> Policy:
+    """Validate an already-parsed policy mapping and build the Policy.
+
+    All structural validation lives here; :func:`load_policy` only reads
+    the file, decodes it and attaches ``source_sha256``.
+
+    Raises:
+        roe_guard.exceptions.PolicyParseError: On any structural or
+            semantic validation failure.
+    """
+    # parse_policy callers receive warnings with the default stacklevel:
+    # _parse_policy -> warnings.warn is one frame deep.
+    return _parse_policy(raw, _stacklevel=2)
+
+
 def _load_policy(path: str | Path, *, _stacklevel: int) -> Policy:
     """Implementation of :func:`load_policy`; ``_stacklevel`` targets the user call site."""
     p = Path(path)
     if not p.exists():
         raise PolicyParseError(f"policy file not found: {p}", field=str(p))
 
+    data = p.read_bytes()
+    sha = hashlib.sha256(data).hexdigest()
     try:
-        with p.open("r", encoding="utf-8") as fh:
-            raw = yaml.safe_load(fh)
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PolicyParseError(
+            f"policy file is not valid UTF-8: {exc}", field=str(p)
+        ) from exc
+
+    try:
+        raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise PolicyParseError(f"YAML syntax error: {exc}", field=str(p)) from exc
 
@@ -320,6 +369,18 @@ def _load_policy(path: str | Path, *, _stacklevel: int) -> Policy:
             f"top-level YAML must be a mapping, got {type(raw).__name__}",
             field=str(p),
         )
+
+    # +1 frame: load_policy -> _load_policy -> _parse_policy -> warn.
+    policy = _parse_policy(raw, _stacklevel=_stacklevel + 1)
+    if policy.source_sha256:
+        raise PolicyParseError("source_sha256 already set", field="<top>")
+    from dataclasses import replace as _dc_replace
+
+    return _dc_replace(policy, source_sha256=sha)
+
+
+def _parse_policy(raw: dict[str, Any], *, _stacklevel: int) -> Policy:
+    """Structural + semantic validation shared by file and mapping input."""
 
     # --- Schema version (before required fields; fail-closed) -----------
     schema_version = _parse_schema_version(raw)
@@ -399,6 +460,11 @@ def _load_policy(path: str | Path, *, _stacklevel: int) -> Policy:
             field="valid_from/valid_until",
         )
 
+    if schema_version >= 2 and not isinstance(raw["scope"], dict):
+        raise PolicyParseError(
+            f"'scope' must be a mapping, got {type(raw['scope']).__name__}",
+            field="scope",
+        )
     scope = _parse_scope(raw["scope"])
 
     # --- Optional fields (default to empty) ----------------------------
@@ -426,6 +492,31 @@ def _load_policy(path: str | Path, *, _stacklevel: int) -> Policy:
     )
     approvers = _parse_str_list(raw.get("approvers", []), field="approvers")
 
+    # --- mode (v2; default enforce) --------------------------------------
+    mode_raw = raw.get("mode")
+    if mode_raw is None or mode_raw == "enforce":
+        mode = EnforcementMode.ENFORCE
+    elif mode_raw == "observe":
+        mode = EnforcementMode.OBSERVE
+    else:
+        raise PolicyParseError(
+            f"'mode' must be 'enforce' or 'observe', got {mode_raw!r}",
+            field="mode",
+        )
+
+    # --- sandbox (v2) -----------------------------------------------------
+    sandbox = _parse_sandbox(raw.get("sandbox")) if "sandbox" in raw else None
+
+    # --- approval (v2) ----------------------------------------------------
+    approval = _parse_approval(raw.get("approval")) if "approval" in raw else None
+
+    # --- top-level x-* extensions (v1 and v2) ------------------------------
+    extensions = {
+        key: value
+        for key, value in raw.items()
+        if isinstance(key, str) and key.startswith("x-")
+    }
+
     return Policy(
         engagement_id=engagement_id,
         valid_from=valid_from,
@@ -437,7 +528,188 @@ def _load_policy(path: str | Path, *, _stacklevel: int) -> Policy:
         approval_required_for=approval_required_for,
         approvers=approvers,
         schema_version=schema_version,
+        mode=mode,
+        sandbox=sandbox,
+        approval=approval,
+        extensions=extensions,
     )
 
 
-__all__ = ["MAX_SCHEMA_VERSION", "load_policy"]
+def _require_int(value: Any, *, field: str) -> int:
+    """Strict positive-int check: no bool, no integral float (256.0)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise PolicyParseError(
+            f"'{field}' must be an integer, got {type(value).__name__}",
+            field=field,
+        )
+    if value < 1:
+        raise PolicyParseError(f"'{field}' must be >= 1, got {value}", field=field)
+    return value
+
+
+def _parse_str_tuple_list(value: Any, *, field: str) -> tuple[str, ...]:
+    """v2 string lists: list of non-empty strings; null is NOT accepted."""
+    if not isinstance(value, list):
+        raise PolicyParseError(
+            f"'{field}' must be a list, got {type(value).__name__}",
+            field=field,
+        )
+    items = []
+    for idx, item in enumerate(value):
+        if not isinstance(item, str) or not item:
+            raise PolicyParseError(
+                f"'{field}[{idx}]' must be a non-empty string, got {item!r}",
+                field=f"{field}[{idx}]",
+            )
+        items.append(item)
+    return tuple(items)
+
+
+def _parse_sandbox(raw: Any) -> SandboxSpec:
+    if not isinstance(raw, dict):
+        raise PolicyParseError(
+            f"'sandbox' must be a mapping, got {type(raw).__name__}",
+            field="sandbox",
+        )
+    _check_keys(
+        raw,
+        _SANDBOX_KEYS,
+        path="sandbox",
+        strict=raw.get("schema_version", 1) >= 2,
+        ignored=[],
+    )
+    filesystem = None
+    if "filesystem" in raw:
+        fs = raw["filesystem"]
+        if not isinstance(fs, dict):
+            raise PolicyParseError(
+                f"'sandbox.filesystem' must be a mapping, got {type(fs).__name__}",
+                field="sandbox.filesystem",
+            )
+        _check_keys(
+            fs, _FILESYSTEM_KEYS, path="sandbox.filesystem", strict=True, ignored=[]
+        )
+        filesystem = FilesystemSpec(
+            read=_parse_str_tuple_list(
+                fs.get("read", []), field="sandbox.filesystem.read"
+            ),
+            write=_parse_str_tuple_list(
+                fs.get("write", []), field="sandbox.filesystem.write"
+            ),
+            deny=_parse_str_tuple_list(
+                fs.get("deny", []), field="sandbox.filesystem.deny"
+            ),
+        )
+    syscalls = None
+    if "syscalls" in raw:
+        sc = raw["syscalls"]
+        if not isinstance(sc, dict):
+            raise PolicyParseError(
+                f"'sandbox.syscalls' must be a mapping, got {type(sc).__name__}",
+                field="sandbox.syscalls",
+            )
+        _check_keys(sc, _SYSCALL_KEYS, path="sandbox.syscalls", strict=True, ignored=[])
+        profile = sc.get("profile")
+        if profile is not None and (not isinstance(profile, str) or not profile):
+            raise PolicyParseError(
+                f"'sandbox.syscalls.profile' must be a non-empty string, got {profile!r}",
+                field="sandbox.syscalls.profile",
+            )
+        syscalls = SyscallSpec(
+            profile=profile,
+            deny=_parse_str_tuple_list(
+                sc.get("deny", []), field="sandbox.syscalls.deny"
+            ),
+        )
+    resources = None
+    if "resources" in raw:
+        rs = raw["resources"]
+        if not isinstance(rs, dict):
+            raise PolicyParseError(
+                f"'sandbox.resources' must be a mapping, got {type(rs).__name__}",
+                field="sandbox.resources",
+            )
+        _check_keys(
+            rs, _RESOURCE_KEYS, path="sandbox.resources", strict=True, ignored=[]
+        )
+        pids_max = (
+            _require_int(rs["pids_max"], field="sandbox.resources.pids_max")
+            if "pids_max" in rs
+            else None
+        )
+        memory_max = rs.get("memory_max")
+        if memory_max is not None and (
+            not isinstance(memory_max, str) or not memory_max
+        ):
+            raise PolicyParseError(
+                f"'sandbox.resources.memory_max' must be a non-empty string, got {memory_max!r}",
+                field="sandbox.resources.memory_max",
+            )
+        cpu_max = rs.get("cpu_max")
+        if cpu_max is not None and (not isinstance(cpu_max, str) or not cpu_max):
+            raise PolicyParseError(
+                f"'sandbox.resources.cpu_max' must be a non-empty string, got {cpu_max!r}",
+                field="sandbox.resources.cpu_max",
+            )
+        resources = ResourceSpec(
+            pids_max=pids_max, memory_max=memory_max, cpu_max=cpu_max
+        )
+    credentials = None
+    if "credentials" in raw:
+        cr = raw["credentials"]
+        if not isinstance(cr, dict):
+            raise PolicyParseError(
+                f"'sandbox.credentials' must be a mapping, got {type(cr).__name__}",
+                field="sandbox.credentials",
+            )
+        _check_keys(
+            cr, _CREDENTIAL_KEYS, path="sandbox.credentials", strict=True, ignored=[]
+        )
+        max_ttl = (
+            _require_int(
+                cr["max_ttl_seconds"], field="sandbox.credentials.max_ttl_seconds"
+            )
+            if "max_ttl_seconds" in cr
+            else None
+        )
+        credentials = CredentialSpec(max_ttl_seconds=max_ttl)
+    imds = raw.get("imds", "deny")
+    if imds != "deny":
+        raise PolicyParseError(
+            f"'sandbox.imds' accepts only 'deny', got {imds!r}",
+            field="sandbox.imds",
+        )
+    return SandboxSpec(
+        filesystem=filesystem,
+        syscalls=syscalls,
+        resources=resources,
+        credentials=credentials,
+        imds=imds,
+    )
+
+
+def _parse_approval(raw: Any) -> ApprovalSpec:
+    if not isinstance(raw, dict):
+        raise PolicyParseError(
+            f"'approval' must be a mapping, got {type(raw).__name__}",
+            field="approval",
+        )
+    _check_keys(raw, _APPROVAL_KEYS, path="approval", strict=True, ignored=[])
+    if "timeout_seconds" not in raw:
+        raise PolicyParseError(
+            "missing required field: approval.timeout_seconds",
+            field="approval.timeout_seconds",
+        )
+    timeout_seconds = _require_int(
+        raw["timeout_seconds"], field="approval.timeout_seconds"
+    )
+    on_timeout = raw.get("on_timeout", "deny")
+    if on_timeout != "deny":
+        raise PolicyParseError(
+            f"'approval.on_timeout' accepts only 'deny', got {on_timeout!r}",
+            field="approval.on_timeout",
+        )
+    return ApprovalSpec(timeout_seconds=timeout_seconds, on_timeout=on_timeout)
+
+
+__all__ = ["MAX_SCHEMA_VERSION", "load_policy", "parse_policy"]

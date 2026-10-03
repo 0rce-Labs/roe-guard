@@ -19,7 +19,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from roe_guard.exceptions import PolicyExpiredError
-from roe_guard.models import Decision, DecisionType, Engagement, ScopeEntry
+from roe_guard.models import (
+    Decision,
+    DecisionType,
+    Engagement,
+    Policy,
+    ReasonCode,
+    ScopeEntry,
+)
 
 # ---------------------------------------------------------------------------
 # Target matching
@@ -61,6 +68,40 @@ def _target_matches(target: str, entry: ScopeEntry) -> bool:
 def _matches_any(target: str, entries: list[ScopeEntry]) -> bool:
     """Return True if *target* matches **any** entry in the list."""
     return any(_target_matches(target, e) for e in entries)
+
+
+def _first_match(target: str, entries: list[ScopeEntry]) -> int | None:
+    """Return the index of the first entry matching *target*, else None."""
+    for idx, entry in enumerate(entries):
+        if _target_matches(target, entry):
+            return idx
+    return None
+
+
+def _decide(
+    policy: Policy,
+    target: str,
+    action_type: str,
+    now: datetime,
+    outcome: DecisionType,
+    reason: str,
+    code: ReasonCode,
+    rule: str,
+) -> Decision:
+    """Single Decision constructor: fills mode, reason_code and matched_rule.
+
+    The v1 ``reason`` texts pass through byte-for-byte unchanged.
+    """
+    return Decision(
+        outcome=outcome,
+        reason=reason,
+        target=target,
+        action_type=action_type,
+        timestamp=now,
+        mode=policy.mode,
+        reason_code=code.value,
+        matched_rule=rule,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -112,85 +153,110 @@ def enforce(
 
     # --- (a) Time-window check -------------------------------------------
     if not (policy.valid_from <= now < policy.valid_until):
-        return Decision(
-            outcome=DecisionType.DENY,
-            reason="policy expired or not yet active",
-            target=target,
-            action_type=action_type,
-            timestamp=now,
+        return _decide(
+            policy,
+            target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "policy expired or not yet active",
+            ReasonCode.POLICY_NOT_ACTIVE,
+            "valid_from/valid_until",
         )
 
     # --- (b) Blackout-window check --------------------------------------
-    for bw in policy.blackout_windows:
+    for bw_index, bw in enumerate(policy.blackout_windows):
         if bw.start <= now < bw.end:
             reason = "inside blackout window"
             if bw.reason:
                 reason = f"{reason}: {bw.reason}"
-            return Decision(
-                outcome=DecisionType.DENY,
-                reason=reason,
-                target=target,
-                action_type=action_type,
-                timestamp=now,
+            return _decide(
+                policy,
+                target,
+                action_type,
+                now,
+                DecisionType.DENY,
+                reason,
+                ReasonCode.BLACKOUT_WINDOW,
+                f"blackout_windows[{bw_index}]",
             )
 
     # --- (c) Explicit deny overrides allow ------------------------------
-    if _matches_any(target, policy.scope.deny):
-        return Decision(
-            outcome=DecisionType.DENY,
-            reason="target explicitly denied in scope",
-            target=target,
-            action_type=action_type,
-            timestamp=now,
+    deny_index = _first_match(target, policy.scope.deny)
+    if deny_index is not None:
+        return _decide(
+            policy,
+            target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "target explicitly denied in scope",
+            ReasonCode.TARGET_DENIED,
+            f"scope.deny[{deny_index}]",
         )
 
     # --- (d) Target must be in scope.allow ------------------------------
     if not _matches_any(target, policy.scope.allow):
-        return Decision(
-            outcome=DecisionType.DENY,
-            reason="target not in allowed scope",
-            target=target,
-            action_type=action_type,
-            timestamp=now,
+        return _decide(
+            policy,
+            target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "target not in allowed scope",
+            ReasonCode.TARGET_NOT_IN_SCOPE,
+            "scope.allow",
         )
 
     # --- (e) actions.deny check -----------------------------------------
     if action_type in policy.actions_deny:
-        return Decision(
-            outcome=DecisionType.DENY,
-            reason=f"action type {action_type!r} explicitly denied",
-            target=target,
-            action_type=action_type,
-            timestamp=now,
+        return _decide(
+            policy,
+            target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            f"action type {action_type!r} explicitly denied",
+            ReasonCode.ACTION_DENIED,
+            "actions.deny",
         )
 
     # --- (f) approval_required_for check (NOT ALLOW) --------------------
     if action_type in policy.approval_required_for:
-        return Decision(
-            outcome=DecisionType.REQUIRES_APPROVAL,
-            reason=f"action type {action_type!r} requires human approval",
-            target=target,
-            action_type=action_type,
-            timestamp=now,
+        return _decide(
+            policy,
+            target,
+            action_type,
+            now,
+            DecisionType.REQUIRES_APPROVAL,
+            f"action type {action_type!r} requires human approval",
+            ReasonCode.APPROVAL_REQUIRED,
+            "approval_required_for",
         )
 
     # --- (g) actions.allow check ----------------------------------------
     if action_type in policy.actions_allow:
-        return Decision(
-            outcome=DecisionType.ALLOW,
-            reason=f"action type {action_type!r} allowed",
-            target=target,
-            action_type=action_type,
-            timestamp=now,
+        return _decide(
+            policy,
+            target,
+            action_type,
+            now,
+            DecisionType.ALLOW,
+            f"action type {action_type!r} allowed",
+            ReasonCode.ACTION_ALLOWED,
+            "actions.allow",
         )
 
     # --- (h) Fail-closed default ----------------------------------------
-    return Decision(
-        outcome=DecisionType.DENY,
-        reason="action type not explicitly allowed",
-        target=target,
-        action_type=action_type,
-        timestamp=now,
+    return _decide(
+        policy,
+        target,
+        action_type,
+        now,
+        DecisionType.DENY,
+        "action type not explicitly allowed",
+        ReasonCode.ACTION_NOT_ALLOWED,
+        "",
     )
 
 

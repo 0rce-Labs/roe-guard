@@ -25,17 +25,25 @@ from roe_guard.exceptions import (
 from roe_guard.integrations.context import window
 from roe_guard.integrations.decorator import guarded
 from roe_guard.models import (
+    ApprovalSpec,
     AuditEntry,
     AuditVerificationResult,
     BlackoutWindow,
+    CredentialSpec,
     Decision,
     DecisionType,
+    EnforcementMode,
     Engagement,
+    FilesystemSpec,
     Policy,
+    ReasonCode,
+    ResourceSpec,
+    SandboxSpec,
     Scope,
     ScopeEntry,
+    SyscallSpec,
 )
-from roe_guard.policy import MAX_SCHEMA_VERSION, load_policy
+from roe_guard.policy import MAX_SCHEMA_VERSION, load_policy, parse_policy
 
 __version__ = "0.1.0a1"
 
@@ -43,26 +51,35 @@ __all__ = [
     "GENESIS_PREV_HASH",
     "MAX_SCHEMA_VERSION",
     "ApprovalRequiredError",
+    "ApprovalSpec",
     "AuditEntry",
     "AuditIntegrityError",
     "AuditLog",
     "AuditVerificationResult",
     "BlackoutWindow",
+    "CredentialSpec",
     "Decision",
     "DecisionType",
+    "EnforcementMode",
     "Engagement",
+    "FilesystemSpec",
     "OutOfScopeError",
     "Policy",
     "PolicyExpiredError",
     "PolicyParseError",
+    "ReasonCode",
+    "ResourceSpec",
     "RoeGuardError",
+    "SandboxSpec",
     "Scope",
     "ScopeEntry",
+    "SyscallSpec",
     "UnknownKeyWarning",
     "__version__",
     "enforce",
     "guarded",
     "load_policy",
+    "parse_policy",
     "raise_if_expired",
     "window",
 ]
