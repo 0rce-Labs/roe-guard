@@ -991,3 +991,20 @@ def test_e2_e3_e4_e5_order():
         _eg(Engagement(policy=_policy(None)), "bad host", 443).reason_code
         == "EGRESS_TARGET_INVALID"
     )
+
+
+def test_wide_ipv6_deny_covers_ipv6_spellings_only():
+    # deny ::/0 with allow 0.0.0.0/0 means "no IPv6": dotted IPv4 passes, any IPv6 spelling is denied.
+    eng = Engagement(
+        policy=_policy(
+            {
+                "http": {
+                    "allow": [{"cidr": "0.0.0.0/0", "ports": [443]}],
+                    "deny": [{"cidr": "::/0"}],
+                }
+            }
+        )
+    )
+    assert _eg(eng, "203.0.113.5", 443).reason_code == "EGRESS_ALLOWED"
+    assert _eg(eng, "::ffff:203.0.113.5", 443).reason_code == "EGRESS_HOST_DENIED"
+    assert _eg(eng, "2001:db8::1", 443).reason_code == "EGRESS_HOST_DENIED"

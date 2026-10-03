@@ -457,7 +457,7 @@ Dönen `Decision`'da `target` = `host:port`'tur; IPv6 hedefte `[host]:port`. `ac
 **Eşleştirme:**
 
 - `host` glob'ları yalnız ad hedefleriyle eşleşir; küçük harfe çevrilmiş dizelerde `fnmatchcase` kullanılır. Desen de hedef gibi normalleştirilir: küçük harfe çevrilir ve sondaki tek `.` atılır.
-- `cidr` girdileri yalnız IP literal hedeflerle eşleşir. `::ffff:0:0/96` içinde yazılmış bir `cidr` girdisi IPv4 karşılığı olarak okunur (önek − 96). IPv4-mapped IPv6 hedef (`::ffff:a.b.c.d`) `allow` girdileriyle yalnız eşlendiği IPv4 adresi olarak, `deny` girdileriyle hem bu IPv4 adresi hem IPv6 adresi olarak eşleştirilir. Böylece hiçbir yazım bir `deny` girdisini atlatamaz ve `::/0` gibi bir IPv6 `allow` girdisi IPv4 izin listesini genişletemez.
+- `cidr` girdileri yalnız IP literal hedeflerle eşleşir. `::ffff:0:0/96` içinde yazılmış bir `cidr` girdisi IPv4 karşılığı olarak okunur (önek − 96). IPv4-mapped IPv6 hedef (`::ffff:a.b.c.d`) `allow` girdileriyle yalnız eşlendiği IPv4 adresi olarak, `deny` girdileriyle hem bu IPv4 adresi hem IPv6 adresi olarak eşleştirilir. Böylece bir IPv4 adresi için yazılmış `deny` girdisi (IPv4 ya da `::ffff:0:0/96` içinde) hiçbir yazımla atlatılamaz ve `::/0` gibi bir IPv6 `allow` girdisi IPv4 izin listesini genişletemez. `::/0` gibi daha geniş bir IPv6 `deny` girdisi IPv6 yazımlı hedefleri (IPv4-mapped dahil) kapsar, IPv4 yazımlı hedefleri kapsamaz.
 - `methods` karşılaştırması tam ve büyük/küçük harfe duyarlıdır.
 - `egress.http` yoksa allow listesi boş sayılır ve sonuç E7 olur.
 
