@@ -177,8 +177,9 @@ def enforce(
         agent:       Keyword-only caller identity. When the policy has an
             ``agent`` block, a call without an identity (CLI ``check``,
             ``guarded`` without ``agent=``) is always DENY with
-            ``AGENT_ID_MISSING`` (fail-closed). Ignored when the policy has
-            no ``agent`` block.
+            ``AGENT_ID_MISSING`` (fail-closed). When the policy has no
+            ``agent`` block, step 0 is skipped and the identity is only
+            recorded in ``Decision.agent_id`` (``""`` when absent).
 
     Returns:
         A :class:`~roe_guard.models.Decision` with the resolved outcome,
