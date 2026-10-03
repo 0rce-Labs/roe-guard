@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v2 `egress` block and `enforce_egress()` / `Engagement.check_egress()` (host glob / CIDR / port / method; built-in deny for instance-metadata and link-local targets).
+
 - v2 `agent` block and decision-ladder step 0 (SPIFFE ID glob + runtime allowlist); keyword-only `agent=` on `enforce`, `Engagement.check`, `guarded`.
 
 - v2 policy loading: `mode` (`EnforcementMode`, default `enforce`), `sandbox`, `approval`, top-level `x-*` extensions, `parse_policy()`, `Policy.source_sha256`; `Decision.reason_code` / `matched_rule`.
