@@ -15,6 +15,8 @@ NOW = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
 EXPECTED_ALL = [
     "ApprovalSpec",
     "ApprovalRequiredError",
+    "AgentIdentity",
+    "AgentSpec",
     "AuditEntry",
     "AuditIntegrityError",
     "AuditLog",

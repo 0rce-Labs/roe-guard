@@ -36,6 +36,7 @@ import yaml
 
 from roe_guard.exceptions import PolicyParseError, UnknownKeyWarning
 from roe_guard.models import (
+    AgentSpec,
     ApprovalSpec,
     BlackoutWindow,
     CredentialSpec,
@@ -240,6 +241,7 @@ _TOP_KEYS = frozenset(
         "mode",
         "sandbox",
         "approval",
+        "agent",
     }
 )
 _V2_RESERVED_TOP = frozenset({"mode", "agent", "sandbox", "egress", "approval"})
@@ -255,6 +257,7 @@ _SYSCALL_KEYS = frozenset({"profile", "deny"})
 _RESOURCE_KEYS = frozenset({"pids_max", "memory_max", "cpu_max"})
 _CREDENTIAL_KEYS = frozenset({"max_ttl_seconds"})
 _APPROVAL_KEYS = frozenset({"timeout_seconds", "on_timeout"})
+_AGENT_KEYS = frozenset({"id", "runtime"})
 _INT_VALUE_RE = re.compile(r"^[0-9]+$", re.ASCII)
 
 
@@ -543,6 +546,9 @@ def _parse_policy(raw: dict[str, Any], *, _stacklevel: int) -> Policy:
     # --- approval (v2) ----------------------------------------------------
     approval = _parse_approval(raw.get("approval")) if "approval" in raw else None
 
+    # --- agent (v2) -------------------------------------------------------
+    agent = _parse_agent(raw.get("agent")) if "agent" in raw else None
+
     # --- top-level x-* extensions (v1 and v2) ------------------------------
     extensions = {
         key: value
@@ -565,6 +571,7 @@ def _parse_policy(raw: dict[str, Any], *, _stacklevel: int) -> Policy:
         sandbox=sandbox,
         approval=approval,
         extensions=extensions,
+        agent=agent,
     )
 
 
@@ -717,6 +724,48 @@ def _parse_sandbox(raw: Any) -> SandboxSpec:
         credentials=credentials,
         imds=imds,
     )
+
+
+def _parse_agent(raw: Any) -> AgentSpec:
+    if not isinstance(raw, dict):
+        raise PolicyParseError(
+            f"'agent' must be a mapping, got {type(raw).__name__}",
+            field="agent",
+        )
+    _check_keys(raw, _AGENT_KEYS, path="agent", strict=True, ignored=[])
+    if "id" not in raw:
+        raise PolicyParseError(
+            "missing required field: agent.id",
+            field="agent.id",
+        )
+    agent_id = raw["id"]
+    if not isinstance(agent_id, str) or not agent_id:
+        raise PolicyParseError(
+            f"'agent.id' must be a non-empty string, got {agent_id!r}",
+            field="agent.id",
+        )
+    if not agent_id.startswith("spiffe://"):
+        raise PolicyParseError(
+            f"'agent.id' must start with 'spiffe://', got {agent_id!r}",
+            field="agent.id",
+        )
+    runtime_raw = raw.get("runtime", [])
+    if runtime_raw is None:
+        runtime_raw = []
+    if not isinstance(runtime_raw, list):
+        raise PolicyParseError(
+            f"'agent.runtime' must be a list, got {type(runtime_raw).__name__}",
+            field="agent.runtime",
+        )
+    runtime_items = []
+    for idx, item in enumerate(runtime_raw):
+        if not isinstance(item, str) or not item:
+            raise PolicyParseError(
+                f"'agent.runtime[{idx}]' must be a non-empty string, got {item!r}",
+                field=f"agent.runtime[{idx}]",
+            )
+        runtime_items.append(item)
+    return AgentSpec(id=agent_id, runtime=tuple(runtime_items))
 
 
 def _parse_approval(raw: Any) -> ApprovalSpec:
