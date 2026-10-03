@@ -1,0 +1,13 @@
+schema_version: 2
+engagement_id: "fx-valid_extensions"
+valid_from: "2026-10-01T00:00:00Z"
+valid_until: "2026-10-02T00:00:00Z"
+scope:
+  allow:
+    - hostname: "*.api.example.com"
+      x-tag: "t"
+actions:
+  allow: ["tool.http.get"]
+  x-note: "n"
+x-vendor:
+  tier: 1

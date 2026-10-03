@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Structural schema (SPEC §14.8). Loader-only checks: date order, CIDR validity, ISO-8601 parsing, whole-string ASCII pattern matching and rejecting whole-number floats (2.0) where SPEC requires int.",
+  "$id": "https://raw.githubusercontent.com/0rce-Labs/roe-guard/main/schema/policy.v2.json",
+  "title": "roe-guard policy schema v2",
+  "type": "object",
+  "required": ["schema_version", "engagement_id", "valid_from", "valid_until", "scope"],
+  "additionalProperties": false,
+  "patternProperties": {"^x-": true},
+  "properties": {
+    "schema_version": {"const": 2},
+    "engagement_id": {"$ref": "#/$defs/nonEmptyString"},
+    "valid_from": {"$ref": "#/$defs/nonEmptyString"},
+    "valid_until": {"$ref": "#/$defs/nonEmptyString"},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "properties": {
+        "allow": {"type": ["array", "null"], "items": {"$ref": "#/$defs/scopeEntry"}},
+        "deny": {"type": ["array", "null"], "items": {"$ref": "#/$defs/scopeEntry"}}
+      }
+    },
+    "actions": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "properties": {
+        "allow": {"$ref": "#/$defs/nullableStringList"},
+        "deny": {"$ref": "#/$defs/nullableStringList"}
+      }
+    },
+    "blackout_windows": {
+      "type": ["array", "null"],
+      "items": {"$ref": "#/$defs/blackoutWindow"}
+    },
+    "approval_required_for": {"$ref": "#/$defs/nullableStringList"},
+    "approvers": {"$ref": "#/$defs/nullableStringList"},
+    "mode": {"enum": ["enforce", "observe"]},
+    "agent": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "properties": {
+        "id": {"type": "string", "pattern": "^spiffe://"},
+        "runtime": {"$ref": "#/$defs/stringList"}
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "properties": {
+        "filesystem": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {"^x-": true},
+          "properties": {
+            "read": {"$ref": "#/$defs/stringList"},
+            "write": {"$ref": "#/$defs/stringList"},
+            "deny": {"$ref": "#/$defs/stringList"}
+          }
+        },
+        "syscalls": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {"^x-": true},
+          "properties": {
+            "profile": {"$ref": "#/$defs/nonEmptyString"},
+            "deny": {"$ref": "#/$defs/stringList"}
+          }
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {"^x-": true},
+          "properties": {
+            "pids_max": {"type": "integer", "minimum": 1},
+            "memory_max": {"$ref": "#/$defs/nonEmptyString"},
+            "cpu_max": {"$ref": "#/$defs/nonEmptyString"}
+          }
+        },
+        "credentials": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {"^x-": true},
+          "properties": {
+            "max_ttl_seconds": {"type": "integer", "minimum": 1}
+          }
+        },
+        "imds": {"const": "deny"}
+      }
+    },
+    "egress": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "properties": {
+        "default": {"const": "deny"},
+        "http": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {"^x-": true},
+          "properties": {
+            "allow": {"type": "array", "items": {"$ref": "#/$defs/egressHttpAllowEntry"}},
+            "deny": {"type": "array", "items": {"$ref": "#/$defs/egressHttpDenyEntry"}}
+          }
+        },
+        "dns": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {"^x-": true},
+          "properties": {
+            "allow": {"$ref": "#/$defs/stringList"},
+            "deny": {"$ref": "#/$defs/stringList"},
+            "record_types": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"enum": ["A", "AAAA", "CNAME"]}
+            }
+          }
+        }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "required": ["timeout_seconds"],
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "properties": {
+        "timeout_seconds": {"type": "integer", "minimum": 1},
+        "on_timeout": {"const": "deny"}
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {"type": "string", "minLength": 1},
+    "nullableStringList": {"type": ["array", "null"], "items": {"$ref": "#/$defs/nonEmptyString"}},
+    "stringList": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}},
+    "scopeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "oneOf": [
+        {"required": ["cidr"], "not": {"required": ["hostname"]}},
+        {"required": ["hostname"], "not": {"required": ["cidr"]}}
+      ],
+      "properties": {
+        "cidr": {"$ref": "#/$defs/nonEmptyString"},
+        "hostname": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "blackoutWindow": {
+      "type": "object",
+      "required": ["start", "end"],
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "properties": {
+        "start": {"$ref": "#/$defs/nonEmptyString"},
+        "end": {"$ref": "#/$defs/nonEmptyString"},
+        "reason": {"type": ["string", "null"]}
+      }
+    },
+    "egressHttpAllowEntry": {
+      "type": "object",
+      "required": ["ports"],
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "oneOf": [
+        {"required": ["host"], "not": {"required": ["cidr"]}},
+        {"required": ["cidr"], "not": {"required": ["host"]}}
+      ],
+      "properties": {
+        "host": {"$ref": "#/$defs/nonEmptyString"},
+        "cidr": {"$ref": "#/$defs/nonEmptyString"},
+        "ports": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 1, "maximum": 65535}
+        },
+        "methods": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^[A-Z]+$"}
+        }
+      }
+    },
+    "egressHttpDenyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^x-": true},
+      "oneOf": [
+        {"required": ["host"], "not": {"required": ["cidr"]}},
+        {"required": ["cidr"], "not": {"required": ["host"]}}
+      ],
+      "properties": {
+        "host": {"$ref": "#/$defs/nonEmptyString"},
+        "cidr": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    }
+  }
+}

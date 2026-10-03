@@ -39,8 +39,8 @@ dev = [
     "ruff>=0.4",
     "mypy==2.4.0",
     "types-PyYAML==6.0.12.20260906",
+    "jsonschema==4.26.0",
 ]
-
 [project.scripts]
 roe-guard = "roe_guard.cli:main"
 
