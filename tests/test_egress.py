@@ -386,7 +386,7 @@ def test_record_types_unique_rejected():
     assert exc.value.field == "egress.dns.record_types"
 
 
-# --- null lists are rejected, never treated as empty (third-round fix) --------
+# --- null lists are rejected, never treated as empty (SPEC §14.2) -------------
 
 
 @pytest.mark.parametrize(
@@ -416,7 +416,7 @@ def test_null_lists_rejected(mutate, field):
     assert exc.value.field == field
 
 
-# --- number rules: bool and integral floats (sixth-round rule) -----------------
+# --- number rules: bool and integral floats (SPEC §14.8) ------------------------
 
 
 @pytest.mark.parametrize("bad_port", [True, 443.0, 0, -1, 65536, "443"])
@@ -430,7 +430,7 @@ def test_ports_element_rejections(bad_port):
     assert exc.value.field == "egress.http.allow[0].ports[0]"
 
 
-# --- block mapping rules (fifth-round note) ------------------------------------
+# --- block mapping rules (SPEC §14.2) -------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -524,5 +524,397 @@ def test_egress_e0_agent_ok_passes_to_ladder():
 
 
 def test_egress_agent_is_keyword_only():
+    import inspect
+
     with pytest.raises(TypeError):
-        enforce_egress(ENG_P, "api.example.com", 443, "GET", NOW, None)
+        enforce_egress(ENG_P, "api.example.com", 443, "GET", None)  # 5th positional
+    kw = inspect.Parameter.KEYWORD_ONLY
+    for fn in (enforce_egress, Engagement.check_egress):
+        params = inspect.signature(fn).parameters
+        assert params["agent"].kind is kw and params["now"].kind is kw
+
+
+# --- E9 looks at every host+port match (SPEC §14.5) --------------------------
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("method", ["POST", None, "GET"])
+def test_e9_mixed_restricted_and_open_entries(reverse, method):
+    entries = [
+        {"host": "api.example.com", "ports": [443], "methods": ["GET"]},
+        {"host": "*.example.com", "ports": [443]},
+    ]
+    if reverse:
+        entries.reverse()
+    eng = Engagement(policy=_policy({"http": {"allow": entries}}))
+    d = _eg(eng, "api.example.com", 443, method)
+    # E10: the first entry that is unrestricted or lists the method.
+    expected = next(
+        i for i, e in enumerate(entries) if "methods" not in e or method in e["methods"]
+    )
+    assert (d.outcome, d.reason_code, d.matched_rule) == (
+        DecisionType.ALLOW,
+        "EGRESS_ALLOWED",
+        f"egress.http.allow[{expected}]",
+    )
+
+
+def test_e9_all_restricted_denies_at_first_match():
+    eng = Engagement(
+        policy=_policy(
+            {
+                "http": {
+                    "allow": [
+                        {"host": "*.example.com", "ports": [443], "methods": ["GET"]},
+                        {"host": "api.example.com", "ports": [443], "methods": ["PUT"]},
+                    ]
+                }
+            }
+        )
+    )
+    d = _eg(eng, "api.example.com", 443, "POST")
+    assert (d.reason_code, d.matched_rule, d.reason) == (
+        "EGRESS_METHOD_NOT_ALLOWED",
+        "egress.http.allow[0]",
+        "egress method not allowed",
+    )
+    assert (
+        _eg(eng, "api.example.com", 443, "PUT").matched_rule == "egress.http.allow[1]"
+    )
+
+
+# --- E3 names: no minimum label count (SPEC §14.5) ---------------------------
+
+
+def test_single_label_names_are_valid():
+    d = _eg(ENG_Q, "localhost", 443)
+    assert (d.reason_code, d.matched_rule) == ("EGRESS_ALLOWED", "egress.http.allow[0]")
+    eng = Engagement(
+        policy=_policy({"http": {"allow": [{"host": "intranet", "ports": [443]}]}})
+    )
+    assert _eg(eng, "INTRANET.", 443).reason_code == "EGRESS_ALLOWED"
+    assert (
+        _eg(Engagement(policy=_policy(None)), "intranet", 443).reason_code
+        == "EGRESS_NOT_CONFIGURED"
+    )
+    assert _eg(ENG_Q, "3232235777", 443).reason_code == "EGRESS_TARGET_INVALID"
+
+
+def test_host_pattern_with_trailing_dot_still_denies():
+    eng = Engagement(
+        policy=_policy(
+            {
+                "http": {
+                    "allow": [{"host": "*", "ports": [443]}],
+                    "deny": [{"host": "Bad.Example.COM."}],
+                }
+            }
+        )
+    )
+    d = _eg(eng, "bad.example.com", 443)
+    assert (d.reason_code, d.matched_rule) == (
+        "EGRESS_HOST_DENIED",
+        "egress.http.deny[0]",
+    )
+
+
+# --- IPv4-mapped IPv6 targets match IPv4 cidr entries (SPEC §14.5) -----------
+
+
+@pytest.mark.parametrize("host", ["::ffff:198.51.100.200", "::ffff:c633:64c8"])
+def test_mapped_ipv4_cannot_bypass_ipv4_deny(host):
+    eng = Engagement(
+        policy=_policy(
+            {
+                "http": {
+                    "allow": [
+                        {"cidr": "198.51.100.0/24", "ports": [443]},
+                        {"cidr": "::/0", "ports": [443]},
+                    ],
+                    "deny": [{"cidr": "198.51.100.128/25"}],
+                }
+            }
+        )
+    )
+    d = _eg(eng, host, 443)
+    assert (d.reason_code, d.matched_rule) == (
+        "EGRESS_HOST_DENIED",
+        "egress.http.deny[0]",
+    )
+
+
+def test_mapped_ipv4_matches_ipv4_allow():
+    d = _eg(ENG_P, "::ffff:198.51.100.10", 443)
+    assert (d.reason_code, d.matched_rule) == ("EGRESS_ALLOWED", "egress.http.allow[2]")
+
+
+# --- host/cidr null is a type error, not an absent key ----------------------
+
+
+@pytest.mark.parametrize(
+    ("entry_key", "entry", "field"),
+    [
+        (
+            "allow",
+            {"host": "api.example.com", "cidr": None, "ports": [443]},
+            "egress.http.allow[0]",
+        ),
+        ("allow", {"host": None, "ports": [443]}, "egress.http.allow[0].host"),
+        ("allow", {"cidr": None, "ports": [443]}, "egress.http.allow[0].cidr"),
+        ("deny", {"host": "bad.example.com", "cidr": None}, "egress.http.deny[0]"),
+    ],
+)
+def test_host_or_cidr_null_rejected(entry_key, entry, field):
+    block = {"http": {"allow": [{"host": "a.example.com", "ports": [443]}]}}
+    block["http"][entry_key] = [entry]
+    with pytest.raises(PolicyParseError) as exc:
+        _policy(block)
+    assert exc.value.field == field
+
+
+# --- ladder order is fixed (SPEC §14.5) --------------------------------------
+
+
+def test_imds_precedes_not_configured_and_deny():
+    assert (
+        _eg(Engagement(policy=_policy(None)), "169.254.169.254", 80).reason_code
+        == "EGRESS_IMDS_DENIED"
+    )
+    eng = Engagement(
+        policy=_policy(
+            {
+                "http": {
+                    "allow": [{"cidr": "0.0.0.0/0", "ports": [80]}],
+                    "deny": [{"cidr": "169.254.0.0/16"}],
+                }
+            }
+        )
+    )
+    assert _eg(eng, "169.254.169.254", 80).reason_code == "EGRESS_IMDS_DENIED"
+
+
+def test_e0_e1_e3_order():
+    from roe_guard import AgentIdentity
+
+    agent_policy = _policy(
+        {"http": {"allow": [{"host": "*", "ports": [443]}]}},
+        agent={"id": "spiffe://example.org/a"},
+    )
+    eng = Engagement(policy=agent_policy)
+    # E0 before E1: missing identity on an expired policy.
+    assert (
+        enforce_egress(eng, "api.example.com", 443, now=LATER).reason_code
+        == "AGENT_ID_MISSING"
+    )
+    # E1 before E3: an invalid target on an expired policy.
+    ok = AgentIdentity("spiffe://example.org/a")
+    assert (
+        enforce_egress(eng, "bad host", 443, now=LATER, agent=ok).reason_code
+        == "POLICY_NOT_ACTIVE"
+    )
+    # E8 before E9: host matches, port does not.
+    assert (
+        _eg(ENG_P, "api.example.com", 8443, "POST").reason_code
+        == "EGRESS_PORT_NOT_ALLOWED"
+    )
+
+
+def test_window_end_is_exclusive():
+    end = datetime(2026, 10, 15, 0, 0, 0, tzinfo=timezone.utc)
+    assert (
+        _eg(ENG_Q, "api.example.com", 443, now=end).reason_code == "POLICY_NOT_ACTIVE"
+    )
+
+
+def test_non_string_method_invalid():
+    assert _eg(ENG_Q, "api.example.com", 443, 5).reason_code == "EGRESS_TARGET_INVALID"
+
+
+# --- first match wins for matched_rule (SPEC §14.5) --------------------------
+
+
+def test_first_match_indices():
+    eng = Engagement(
+        policy=_policy(
+            {
+                "http": {
+                    "allow": [
+                        {"host": "*.example.com", "ports": [80]},
+                        {"host": "api.example.com", "ports": [81]},
+                        {"host": "*.example.com", "ports": [443]},
+                        {"host": "api.example.com", "ports": [443]},
+                    ],
+                    "deny": [
+                        {"host": "bad.example.com"},
+                        {"host": "*.example.com", "x-n": 1},
+                    ],
+                }
+            }
+        )
+    )
+    assert _eg(eng, "bad.example.com", 443).matched_rule == "egress.http.deny[0]"
+    eng2 = Engagement(policy=replace_deny(eng.policy))
+    assert (
+        _eg(eng2, "api.example.com", 8080).matched_rule == "egress.http.allow[0]"
+    )  # E8
+    assert (
+        _eg(eng2, "api.example.com", 443).matched_rule == "egress.http.allow[2]"
+    )  # E10
+
+
+def replace_deny(policy):
+    from dataclasses import replace
+
+    http = replace(policy.egress.http, deny=())
+    return replace(policy, egress=replace(policy.egress, http=http))
+
+
+# --- check_egress, reasons and agent_id --------------------------------------
+
+
+def test_check_egress_passes_now_and_agent():
+    from roe_guard import AgentIdentity
+
+    eng = Engagement(
+        policy=_policy(
+            {"http": {"allow": [{"host": "*", "ports": [443]}]}},
+            agent={"id": "spiffe://example.org/a"},
+        )
+    )
+    ok = AgentIdentity("spiffe://example.org/a")
+    d = eng.check_egress("api.example.com", 443, now=NOW, agent=ok)
+    assert (d.reason_code, d.agent_id) == ("EGRESS_ALLOWED", ok.id)
+    assert (
+        eng.check_egress("api.example.com", 443, now=LATER, agent=ok).reason_code
+        == "POLICY_NOT_ACTIVE"
+    )
+
+
+@pytest.mark.parametrize(
+    ("eng_name", "host", "port", "method", "code", "reason"),
+    [
+        ("Q", "bad host", 443, None, "EGRESS_TARGET_INVALID", "egress target invalid"),
+        (
+            "Q",
+            "169.254.169.254",
+            80,
+            None,
+            "EGRESS_IMDS_DENIED",
+            "egress to instance metadata or link-local address denied",
+        ),
+        (
+            "none",
+            "api.example.com",
+            443,
+            None,
+            "EGRESS_NOT_CONFIGURED",
+            "egress not configured in policy",
+        ),
+        (
+            "P",
+            "bad.cdn.example.com",
+            443,
+            None,
+            "EGRESS_HOST_DENIED",
+            "egress host explicitly denied",
+        ),
+        (
+            "P",
+            "other.example.org",
+            443,
+            None,
+            "EGRESS_HOST_NOT_ALLOWED",
+            "egress host not allowed",
+        ),
+        (
+            "P",
+            "api.example.com",
+            8443,
+            None,
+            "EGRESS_PORT_NOT_ALLOWED",
+            "egress port not allowed",
+        ),
+        (
+            "P",
+            "api.example.com",
+            443,
+            "POST",
+            "EGRESS_METHOD_NOT_ALLOWED",
+            "egress method not allowed",
+        ),
+        ("P", "api.example.com", 443, "GET", "EGRESS_ALLOWED", "egress allowed"),
+    ],
+)
+def test_reason_texts(eng_name, host, port, method, code, reason):
+    eng = {"Q": ENG_Q, "P": ENG_P, "none": Engagement(policy=_policy(None))}[eng_name]
+    d = _eg(eng, host, port, method)
+    assert (d.reason_code, d.reason) == (code, reason)
+
+
+# --- strict keys and x- keys inside egress ------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("block", "field"),
+    [
+        ({"zz": 1}, "egress.zz"),
+        ({"http": {"zz": 1}}, "egress.http.zz"),
+        (
+            {
+                "http": {
+                    "allow": [{"host": "a.example.com", "ports": [443], "proto": "udp"}]
+                }
+            },
+            "egress.http.allow[0].proto",
+        ),
+        (
+            {"http": {"deny": [{"host": "a.example.com", "zz": 1}]}},
+            "egress.http.deny[0].zz",
+        ),
+        ({"dns": {"zz": 1}}, "egress.dns.zz"),
+    ],
+)
+def test_unknown_egress_keys_rejected(block, field):
+    with pytest.raises(PolicyParseError) as exc:
+        _policy(block)
+    assert exc.value.field == field
+
+
+def test_x_keys_allowed_in_egress():
+    p = _policy(
+        {
+            "x-n": 1,
+            "http": {
+                "x-n": 1,
+                "allow": [{"host": "a.example.com", "ports": [443], "x-n": 1}],
+                "deny": [{"host": "b.example.com", "x-n": 1}],
+            },
+            "dns": {"x-n": 1},
+        }
+    )
+    assert p.egress is not None
+
+
+# --- IMDS ranges, not just single addresses ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "169.254.0.0",
+        "169.254.255.255",
+        "fe80::",
+        "febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+        "::ffff:169.254.0.1",
+    ],
+)
+def test_imds_range_edges_denied(host):
+    assert _eg(ENG_Q, host, 80).reason_code == "EGRESS_IMDS_DENIED"
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["169.253.255.255", "169.255.0.0", "168.63.129.17", "100.100.100.201", "fec0::1"],
+)
+def test_imds_neighbours_not_denied(host):
+    assert _eg(ENG_Q, host, 80).reason_code == "EGRESS_ALLOWED"

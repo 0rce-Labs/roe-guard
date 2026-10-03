@@ -392,8 +392,6 @@ def _validate_egress_target(
         if not (1 <= len(norm) <= 253):
             return _egress_target_invalid(policy, target, action_type, now)
         labels = norm.split(".")
-        if len(labels) < 2:
-            return _egress_target_invalid(policy, target, action_type, now)
         for label in labels:
             if not _LABEL_RE.fullmatch(label):
                 return _egress_target_invalid(policy, target, action_type, now)
@@ -432,13 +430,18 @@ def _rule_matches_host(
     ip_literal: str | None,
 ) -> bool:
     if rule.cidr is not None:
-        return (
-            is_ip
-            and ip_literal is not None
-            and ipaddress.ip_address(ip_literal)
-            in ipaddress.ip_network(rule.cidr, strict=False)
-        )
-    return (not is_ip) and fnmatch.fnmatchcase(norm_host, (rule.host or "").lower())
+        if not is_ip or ip_literal is None:
+            return False
+        addr = ipaddress.ip_address(ip_literal)
+        # An IPv4-mapped IPv6 target is matched as its IPv4 address, so an IPv4
+        # deny entry cannot be bypassed by writing ::ffff:a.b.c.d (SPEC §14.5).
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+            addr = addr.ipv4_mapped
+        return addr in ipaddress.ip_network(rule.cidr, strict=False)
+    # Patterns are normalised like targets: lower-case, one trailing dot dropped.
+    return (not is_ip) and fnmatch.fnmatchcase(
+        norm_host, _normalize_name(rule.host or "")
+    )
 
 
 def enforce_egress(
@@ -623,7 +626,7 @@ def enforce_egress(
     with_methods: list[tuple[int, HttpAllowRule]] = [
         (idx, rule) for idx, rule in port_matches if rule.methods
     ]
-    if with_methods:
+    if with_methods and len(with_methods) == len(port_matches):
         allowed_somewhere = any(
             method_checked is not None and method_checked in rule.methods
             for _idx, rule in with_methods

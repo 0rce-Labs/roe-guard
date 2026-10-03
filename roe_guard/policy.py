@@ -849,21 +849,21 @@ def _parse_egress(raw: Any) -> EgressSpec:
 def _parse_egress_host_or_cidr(
     entry: dict[str, Any], field: str
 ) -> tuple[str | None, str | None]:
-    host = entry.get("host")
-    cidr = entry.get("cidr")
-    if (host is None) == (cidr is None):
+    # Key presence decides "exactly one"; an explicit null is a type error.
+    if ("host" in entry) == ("cidr" in entry):
         raise PolicyParseError(
             f"'{field}' requires exactly one of 'host' or 'cidr'",
             field=field,
         )
-    if host is not None and (not isinstance(host, str) or not host):
-        raise PolicyParseError(
-            f"'{field}.host' must be a non-empty string, got {host!r}",
-            field=f"{field}.host",
-        )
-    if cidr is not None:
-        cidr = _validate_cidr(cidr, field=f"{field}.cidr")
-    return host, cidr
+    if "host" in entry:
+        host = entry["host"]
+        if not isinstance(host, str) or not host:
+            raise PolicyParseError(
+                f"'{field}.host' must be a non-empty string, got {host!r}",
+                field=f"{field}.host",
+            )
+        return host, None
+    return None, _validate_cidr(entry["cidr"], field=f"{field}.cidr")
 
 
 def _parse_egress_allow_entry(entry: Any, idx: int) -> HttpAllowRule:
