@@ -338,7 +338,8 @@ _IMDS_IPV4 = (
     "100.100.100.200/32",
 )
 _IMDS_V6 = ("fe80::/10", "fd00:ec2::254/128")
-_IMDS_NAMES = {"metadata.google.internal"}
+# Short aliases resolve to the metadata service through cloud search domains.
+_IMDS_NAMES = {"metadata.google.internal", "metadata", "instance-data"}
 
 
 def _egress_target_invalid(
@@ -433,11 +434,26 @@ def _rule_matches_host(
         if not is_ip or ip_literal is None:
             return False
         addr = ipaddress.ip_address(ip_literal)
-        # An IPv4-mapped IPv6 target is matched as its IPv4 address, so an IPv4
-        # deny entry cannot be bypassed by writing ::ffff:a.b.c.d (SPEC §14.5).
+        net: ipaddress.IPv4Network | ipaddress.IPv6Network = ipaddress.ip_network(
+            rule.cidr, strict=False
+        )
+        # A cidr written inside ::ffff:0:0/96 is read as its IPv4 network.
+        if (
+            isinstance(net, ipaddress.IPv6Network)
+            and net.prefixlen >= 96
+            and net.network_address.ipv4_mapped is not None
+        ):
+            net = ipaddress.ip_network(
+                (net.network_address.ipv4_mapped, net.prefixlen - 96)
+            )
+        # An IPv4-mapped target is matched as its IPv4 address; deny entries also
+        # match its IPv6 spelling, so no spelling bypasses a deny and an IPv6
+        # allow such as ::/0 cannot widen an IPv4 allow list (SPEC §14.5).
         if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
-            addr = addr.ipv4_mapped
-        return addr in ipaddress.ip_network(rule.cidr, strict=False)
+            if addr.ipv4_mapped in net:
+                return True
+            return isinstance(rule, HttpDenyRule) and addr in net
+        return addr in net
     # Patterns are normalised like targets: lower-case, one trailing dot dropped.
     return (not is_ip) and fnmatch.fnmatchcase(
         norm_host, _normalize_name(rule.host or "")

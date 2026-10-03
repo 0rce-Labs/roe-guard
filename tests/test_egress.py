@@ -918,3 +918,76 @@ def test_imds_range_edges_denied(host):
 )
 def test_imds_neighbours_not_denied(host):
     assert _eg(ENG_Q, host, 80).reason_code == "EGRESS_ALLOWED"
+
+
+# --- deny entries written in IPv6 mapped form, IPv6 allow does not widen ------
+
+
+@pytest.mark.parametrize(
+    ("deny", "allow", "host"),
+    [
+        ("::ffff:198.51.100.0/120", "198.51.100.0/24", "::ffff:198.51.100.5"),
+        ("::ffff:198.51.100.0/120", "198.51.100.0/24", "198.51.100.5"),
+        ("::ffff:0:0/96", "0.0.0.0/0", "::ffff:203.0.113.5"),
+        ("::/0", "0.0.0.0/0", "::ffff:203.0.113.5"),
+    ],
+)
+def test_ipv6_written_deny_still_denies(deny, allow, host):
+    eng = Engagement(
+        policy=_policy(
+            {
+                "http": {
+                    "allow": [{"cidr": allow, "ports": [443]}],
+                    "deny": [{"cidr": deny}],
+                }
+            }
+        )
+    )
+    d = _eg(eng, host, 443)
+    assert (d.reason_code, d.matched_rule) == (
+        "EGRESS_HOST_DENIED",
+        "egress.http.deny[0]",
+    )
+
+
+def test_ipv6_allow_does_not_widen_ipv4_allow_list():
+    eng = Engagement(
+        policy=_policy(
+            {
+                "http": {
+                    "allow": [
+                        {"cidr": "198.51.100.0/24", "ports": [443]},
+                        {"cidr": "::/0", "ports": [443]},
+                    ]
+                }
+            }
+        )
+    )
+    assert _eg(eng, "::ffff:203.0.113.5", 443).reason_code == "EGRESS_HOST_NOT_ALLOWED"
+    assert _eg(eng, "2001:db8::1", 443).reason_code == "EGRESS_ALLOWED"
+
+
+@pytest.mark.parametrize(
+    "host", ["metadata", "METADATA.", "instance-data", "Metadata.Google.Internal."]
+)
+def test_imds_short_names_denied(host):
+    assert _eg(ENG_Q, host, 80).reason_code == "EGRESS_IMDS_DENIED"
+
+
+def test_e2_e3_e4_e5_order():
+    # E2 before E3: an invalid target inside a blackout window.
+    blackout = Engagement(
+        policy=_policy(
+            {"http": {"allow": [{"host": "*", "ports": [443]}]}},
+            blackout_windows=[
+                {"start": "2026-10-01T10:30:00Z", "end": "2026-10-01T12:00:00Z"}
+            ],
+        )
+    )
+    assert _eg(blackout, "bad host", 443, now=BLACKOUT).reason_code == "BLACKOUT_WINDOW"
+    # E3 before E4 and E5: an invalid port on an IMDS target, and on a policy without egress.
+    assert _eg(ENG_Q, "169.254.169.254", 0).reason_code == "EGRESS_TARGET_INVALID"
+    assert (
+        _eg(Engagement(policy=_policy(None)), "bad host", 443).reason_code
+        == "EGRESS_TARGET_INVALID"
+    )

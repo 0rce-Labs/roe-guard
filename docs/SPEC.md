@@ -451,13 +451,13 @@ Dönen `Decision`'da `target` = `host:port`'tur; IPv6 hedefte `[host]:port`. `ac
 
 - `169.254.0.0/16`, `168.63.129.16`, `100.100.100.200`, `fe80::/10` ve `fd00:ec2::254`.
 - Eşlenen IPv4 adresi bu IPv4 girdilerinden birine düşen IPv4-mapped IPv6 adresler (`::ffff:169.254.x.y`, `::ffff:168.63.129.16`, `::ffff:100.100.100.200`).
-- Normalleştirilmiş ad `metadata.google.internal`.
+- Normalleştirilmiş adlar `metadata.google.internal`, `metadata` ve `instance-data` (bulut arama alan adlarıyla metadata servisine çözülen kısa adlar).
 - Bu adım allow kurallarından önce gelir ve politika ne derse desin uygulanır.
 
 **Eşleştirme:**
 
 - `host` glob'ları yalnız ad hedefleriyle eşleşir; küçük harfe çevrilmiş dizelerde `fnmatchcase` kullanılır. Desen de hedef gibi normalleştirilir: küçük harfe çevrilir ve sondaki tek `.` atılır.
-- `cidr` girdileri yalnız IP literal hedeflerle eşleşir. IPv4-mapped IPv6 hedef (`::ffff:a.b.c.d`) eşlendiği IPv4 adresi olarak eşleştirilir; böylece bir IPv4 `deny` girdisi bu yazımla atlatılamaz.
+- `cidr` girdileri yalnız IP literal hedeflerle eşleşir. `::ffff:0:0/96` içinde yazılmış bir `cidr` girdisi IPv4 karşılığı olarak okunur (önek − 96). IPv4-mapped IPv6 hedef (`::ffff:a.b.c.d`) `allow` girdileriyle yalnız eşlendiği IPv4 adresi olarak, `deny` girdileriyle hem bu IPv4 adresi hem IPv6 adresi olarak eşleştirilir. Böylece hiçbir yazım bir `deny` girdisini atlatamaz ve `::/0` gibi bir IPv6 `allow` girdisi IPv4 izin listesini genişletemez.
 - `methods` karşılaştırması tam ve büyük/küçük harfe duyarlıdır.
 - `egress.http` yoksa allow listesi boş sayılır ve sonuç E7 olur.
 
