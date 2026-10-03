@@ -479,3 +479,20 @@ def test_parse_policy_warning_points_at_caller():
         parse_policy(document)
     hits = [w for w in caught if issubclass(w.category, UnknownKeyWarning)]
     assert hits and hits[0].filename == __file__
+
+
+def test_parse_policy_accepts_any_mapping():
+    from types import MappingProxyType
+
+    assert parse_policy(MappingProxyType(_doc())).schema_version == 2
+
+
+def test_yaml_error_names_the_file(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "engagement_id: a\n  bad: indent\n valid_from: x\n", encoding="utf-8"
+    )
+    with pytest.raises(PolicyParseError) as exc:
+        load_policy(bad)
+    assert exc.value.field == str(bad)
+    assert str(bad) in str(exc.value)

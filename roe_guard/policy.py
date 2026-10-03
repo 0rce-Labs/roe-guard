@@ -23,6 +23,7 @@ All failures raise :class:`~roe_guard.exceptions.PolicyParseError`.
 from __future__ import annotations
 
 import hashlib
+import io
 import ipaddress
 import re
 import warnings
@@ -379,8 +380,11 @@ def _load_policy(path: str | Path, *, _stacklevel: int) -> Policy:
             f"policy file is not valid UTF-8: {exc}", field=str(p)
         ) from exc
 
+    # A named stream keeps the file path in YAML error marks, as before T20.
+    stream = io.StringIO(text)
+    stream.name = str(p)
     try:
-        raw = yaml.safe_load(text)
+        raw = yaml.safe_load(stream)
     except yaml.YAMLError as exc:
         raise PolicyParseError(f"YAML syntax error: {exc}", field=str(p)) from exc
 
