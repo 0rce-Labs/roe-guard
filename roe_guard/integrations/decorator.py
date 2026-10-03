@@ -81,6 +81,9 @@ def guarded(
         action_type: The action type this function represents.
         target_arg:  Name of the wrapped function's parameter (positional
             or keyword) that carries the target string.
+        agent:       Keyword-only caller identity passed to every check.
+            When the policy has an ``agent`` block and no identity is given,
+            every call is denied (``AGENT_ID_MISSING``, fail-closed).
 
     Returns:
         A decorator that checks scope before invoking the wrapped function

@@ -285,7 +285,9 @@ class Engagement:
         """Evaluate a single action against the policy.
 
         Thin wrapper around :func:`roe_guard.engine.enforce` that binds
-        the engagement automatically.
+        the engagement automatically. ``agent`` is the keyword-only caller
+        identity; when the policy has an ``agent`` block, a check without
+        it is always DENY (``AGENT_ID_MISSING``, fail-closed).
         """
         # Local import to avoid circular dependency at module load time.
         from roe_guard.engine import enforce

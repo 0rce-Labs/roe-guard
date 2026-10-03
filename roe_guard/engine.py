@@ -103,7 +103,7 @@ def _decide(
         mode=policy.mode,
         reason_code=code.value,
         matched_rule=rule,
-        agent_id=agent.id if agent is not None else "",
+        agent_id=agent.id if agent is not None and isinstance(agent.id, str) else "",
     )
 
 
@@ -116,11 +116,11 @@ def _check_agent(
     pass. Matching is ``fnmatch.fnmatchcase`` — case-sensitive, ``*`` also
     covers ``/``.
     """
-    if agent is None or agent.id == "":
-        return (ReasonCode.AGENT_ID_MISSING, "agent identity missing", "agent.id")
     spec = policy.agent
-    if spec is None:  # caller contract: only called when policy.agent is set
+    if spec is None:  # no agent block: step 0 does not apply
         return None
+    if agent is None or not isinstance(agent.id, str) or agent.id == "":
+        return (ReasonCode.AGENT_ID_MISSING, "agent identity missing", "agent.id")
     if not fnmatch.fnmatchcase(agent.id, spec.id):
         return (
             ReasonCode.AGENT_ID_MISMATCH,
@@ -152,8 +152,12 @@ def enforce(
 ) -> Decision:
     """Evaluate *one* action against the engagement policy (spec §5).
 
-    The 8-step priority order is intentional and MUST NOT be reordered:
+    The priority order is intentional and MUST NOT be reordered. Step 0
+    runs only when the policy has an ``agent`` block; steps 1-8 are the v1
+    ladder, unchanged:
 
+        0. agent missing / id not matching / runtime not allowed → DENY
+           (AGENT_ID_MISSING, AGENT_ID_MISMATCH, AGENT_RUNTIME_NOT_ALLOWED)
         1. now < valid_from  OR  now >= valid_until  → DENY (expired)
         2. now in any blackout_window                   → DENY
         3. target in scope.deny                         → DENY (deny > allow)
@@ -170,6 +174,11 @@ def enforce(
         now:         Override the evaluation time (UTC). Defaults to
             ``datetime.now(timezone.utc)``. Used for testability.
         metadata:    Optional extra context for audit logging (T5).
+        agent:       Keyword-only caller identity. When the policy has an
+            ``agent`` block, a call without an identity (CLI ``check``,
+            ``guarded`` without ``agent=``) is always DENY with
+            ``AGENT_ID_MISSING`` (fail-closed). Ignored when the policy has
+            no ``agent`` block.
 
     Returns:
         A :class:`~roe_guard.models.Decision` with the resolved outcome,

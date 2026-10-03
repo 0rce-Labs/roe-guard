@@ -211,3 +211,130 @@ def test_engagement_check_agent(engagement):
 def test_agent_is_keyword_only(engagement):
     with pytest.raises(TypeError):
         enforce(engagement, "api.x.api.example.com", "tool.http.get", NOW, None, OK)
+
+
+# --- fail-closed details (SPEC §14.2, §14.4) --------------------------------
+
+
+@pytest.mark.parametrize(
+    ("mutate", "field"),
+    [
+        (lambda d: d["agent"].__setitem__("runtime", None), "agent.runtime"),
+        (lambda d: d["agent"].__setitem__("runtime", "mcp"), "agent.runtime"),
+        (lambda d: d.__setitem__("agent", None), "agent"),
+        (lambda d: d["agent"].__setitem__("id", 123), "agent.id"),
+        (lambda d: d["agent"].__setitem__("id", "https://example.org/a"), "agent.id"),
+    ],
+)
+def test_agent_block_rejects_bad_values(mutate, field):
+    with pytest.raises(PolicyParseError) as exc:
+        _parse_mutated(mutate)
+    assert exc.value.field == field
+
+
+@pytest.mark.parametrize(
+    ("agent", "code", "rule", "reason"),
+    [
+        (None, "AGENT_ID_MISSING", "agent.id", "agent identity missing"),
+        (AgentIdentity(""), "AGENT_ID_MISSING", "agent.id", "agent identity missing"),
+        (
+            AgentIdentity("spiffe://example.org/other", "mcp"),
+            "AGENT_ID_MISMATCH",
+            "agent.id",
+            "agent identity does not match policy",
+        ),
+        (
+            AgentIdentity(OK.id, "foundry"),
+            "AGENT_RUNTIME_NOT_ALLOWED",
+            "agent.runtime",
+            "agent runtime not allowed",
+        ),
+    ],
+)
+def test_step0_rows_match_spec_table(engagement, agent, code, rule, reason):
+    d = _decide(engagement, "api.x.api.example.com", "tool.http.get", agent=agent)
+    assert (d.outcome, d.reason_code, d.matched_rule, d.reason) == (
+        DecisionType.DENY,
+        code,
+        rule,
+        reason,
+    )
+    assert d.agent_id == (agent.id if agent is not None else "")
+
+
+def test_non_string_identity_is_missing(engagement):
+    d = _decide(
+        engagement, "api.x.api.example.com", "tool.http.get", agent=AgentIdentity(123)
+    )
+    assert d.reason_code == "AGENT_ID_MISSING"
+    assert d.agent_id == ""
+
+
+def test_glob_matches_whole_id():
+    def eng(pattern, runtime=None):
+        def mutate(d):
+            d["agent"]["id"] = pattern
+            if runtime is None:
+                d["agent"].pop("runtime", None)
+            else:
+                d["agent"]["runtime"] = runtime
+
+        return Engagement(policy=_parse_mutated(mutate))
+
+    exact = eng("spiffe://example.org/a")
+    longer = AgentIdentity("spiffe://example.org/a/b")
+    assert (
+        enforce(
+            exact, "api.x.api.example.com", "tool.http.get", now=NOW, agent=longer
+        ).reason_code
+        == "AGENT_ID_MISMATCH"
+    )
+    star = eng("spiffe://example.org/*")
+    assert (
+        enforce(
+            star, "api.x.api.example.com", "tool.http.get", now=NOW, agent=longer
+        ).reason_code
+        == "ACTION_ALLOWED"
+    )
+    # No runtime list: any runtime, including none, passes step 0.
+    for runtime in (None, "anything"):
+        d = enforce(
+            star,
+            "api.x.api.example.com",
+            "tool.http.get",
+            now=NOW,
+            agent=AgentIdentity(longer.id, runtime),
+        )
+        assert d.reason_code == "ACTION_ALLOWED"
+
+
+def test_guarded_passes_identity_through(engagement):
+    from dataclasses import replace
+    from datetime import timedelta
+
+    # guarded() checks with the real clock, so the window must contain it.
+    now = datetime.now(timezone.utc)
+    live = Engagement(
+        policy=replace(
+            engagement.policy,
+            valid_from=now - timedelta(days=1),
+            valid_until=now + timedelta(days=1),
+        )
+    )
+    calls = {"count": 0}
+
+    @guarded(live, "tool.http.get", agent=OK)
+    def do_work(target):
+        calls["count"] += 1
+        return "ok"
+
+    assert do_work(target="api.x.api.example.com") == "ok"
+    assert calls["count"] == 1
+
+
+def test_check_agent_without_block_always_passes():
+    from roe_guard.engine import _check_agent
+
+    policy = load_policy(V2 / "valid_minimal.yaml")
+    assert _check_agent(policy, None) is None
+    assert _check_agent(policy, OK) is None

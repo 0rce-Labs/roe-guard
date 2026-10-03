@@ -749,23 +749,14 @@ def _parse_agent(raw: Any) -> AgentSpec:
             f"'agent.id' must start with 'spiffe://', got {agent_id!r}",
             field="agent.id",
         )
-    runtime_raw = raw.get("runtime", [])
-    if runtime_raw is None:
-        runtime_raw = []
-    if not isinstance(runtime_raw, list):
-        raise PolicyParseError(
-            f"'agent.runtime' must be a list, got {type(runtime_raw).__name__}",
-            field="agent.runtime",
-        )
-    runtime_items = []
-    for idx, item in enumerate(runtime_raw):
-        if not isinstance(item, str) or not item:
-            raise PolicyParseError(
-                f"'agent.runtime[{idx}]' must be a non-empty string, got {item!r}",
-                field=f"agent.runtime[{idx}]",
-            )
-        runtime_items.append(item)
-    return AgentSpec(id=agent_id, runtime=tuple(runtime_items))
+    # A null runtime list is rejected like every v2 list (SPEC §14.2); reading
+    # it as [] would silently allow every runtime.
+    runtime = (
+        _parse_str_tuple_list(raw["runtime"], field="agent.runtime")
+        if "runtime" in raw
+        else ()
+    )
+    return AgentSpec(id=agent_id, runtime=runtime)
 
 
 def _parse_approval(raw: Any) -> ApprovalSpec:
