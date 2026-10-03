@@ -24,10 +24,13 @@ from roe_guard.models import (
     Decision,
     DecisionType,
     Engagement,
+    HttpAllowRule,
+    HttpDenyRule,
     Policy,
     ReasonCode,
     ScopeEntry,
 )
+from roe_guard.policy import _LABEL_RE, _NUMERIC_LABEL_RE
 
 # ---------------------------------------------------------------------------
 # Target matching
@@ -329,6 +332,365 @@ def enforce(
     )
 
 
+_IMDS_IPV4 = (
+    "169.254.0.0/16",
+    "168.63.129.16/32",
+    "100.100.100.200/32",
+)
+_IMDS_V6 = ("fe80::/10", "fd00:ec2::254/128")
+# Short aliases resolve to the metadata service through cloud search domains.
+_IMDS_NAMES = {"metadata.google.internal", "metadata", "instance-data"}
+
+
+def _egress_target_invalid(
+    policy: Policy, target: str, action_type: str, now: datetime
+) -> Decision:
+    return _decide(
+        policy,
+        target,
+        action_type,
+        now,
+        DecisionType.DENY,
+        "egress target invalid",
+        ReasonCode.EGRESS_TARGET_INVALID,
+        "",
+    )
+
+
+def _normalize_name(host: str) -> str:
+    lowered = host.lower()
+    lowered = lowered.removesuffix(".")
+    return lowered
+
+
+def _validate_egress_target(
+    policy: Policy,
+    host: str,
+    port: int,
+    method: str | None,
+    target: str,
+    action_type: str,
+    now: datetime,
+) -> tuple[str, bool, int, str | None, str | None] | Decision:
+    """E3: validate host/port/method.
+
+    Returns ``(normalized_host, is_ip, port, method, ip_literal)`` on
+    success or a DENY ``Decision`` (``EGRESS_TARGET_INVALID``).
+    """
+    if not isinstance(host, str) or not host:
+        return _egress_target_invalid(policy, target, action_type, now)
+    ip_literal = None
+    is_ip = False
+    try:
+        ip_literal = ipaddress.ip_address(host)
+        is_ip = True
+    except ValueError:
+        if host != host.strip() or " " in host or "\n" in host or "\r" in host:
+            return _egress_target_invalid(policy, target, action_type, now)
+        if "[" in host or "]" in host:
+            return _egress_target_invalid(policy, target, action_type, now)
+        norm = _normalize_name(host)
+        if not (1 <= len(norm) <= 253):
+            return _egress_target_invalid(policy, target, action_type, now)
+        labels = norm.split(".")
+        for label in labels:
+            if not _LABEL_RE.fullmatch(label):
+                return _egress_target_invalid(policy, target, action_type, now)
+        if _NUMERIC_LABEL_RE.fullmatch(labels[-1]):
+            return _egress_target_invalid(policy, target, action_type, now)
+    if isinstance(port, bool) or not isinstance(port, int) or not (1 <= port <= 65535):
+        return _egress_target_invalid(policy, target, action_type, now)
+    if method is not None and (not isinstance(method, str) or not method):
+        return _egress_target_invalid(policy, target, action_type, now)
+    return (
+        _normalize_name(host) if not is_ip else host,
+        is_ip,
+        port,
+        method,
+        str(ip_literal) if ip_literal is not None else None,
+    )
+
+
+def _is_imds_target(host: str, is_ip: bool, ip_literal: str | None) -> bool:
+    if is_ip and ip_literal is not None:
+        addr = ipaddress.ip_address(ip_literal)
+        if addr.version == 4:
+            return any(addr in ipaddress.ip_network(net) for net in _IMDS_IPV4)
+        # IPv4-mapped IPv6 addresses fall back to their embedded IPv4 address.
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+            v4 = addr.ipv4_mapped
+            return any(v4 in ipaddress.ip_network(net) for net in _IMDS_IPV4)
+        return any(addr in ipaddress.ip_network(net) for net in _IMDS_V6)
+    return _normalize_name(host) in _IMDS_NAMES
+
+
+def _rule_matches_host(
+    rule: HttpAllowRule | HttpDenyRule,
+    norm_host: str,
+    is_ip: bool,
+    ip_literal: str | None,
+) -> bool:
+    if rule.cidr is not None:
+        if not is_ip or ip_literal is None:
+            return False
+        addr = ipaddress.ip_address(ip_literal)
+        net: ipaddress.IPv4Network | ipaddress.IPv6Network = ipaddress.ip_network(
+            rule.cidr, strict=False
+        )
+        # A cidr written inside ::ffff:0:0/96 is read as its IPv4 network.
+        if (
+            isinstance(net, ipaddress.IPv6Network)
+            and net.prefixlen >= 96
+            and net.network_address.ipv4_mapped is not None
+        ):
+            net = ipaddress.ip_network(
+                (net.network_address.ipv4_mapped, net.prefixlen - 96)
+            )
+        # An IPv4-mapped target is matched as its IPv4 address; deny entries also
+        # match its IPv6 spelling, so no spelling bypasses a deny and an IPv6
+        # allow such as ::/0 cannot widen an IPv4 allow list (SPEC §14.5).
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+            if addr.ipv4_mapped in net:
+                return True
+            return isinstance(rule, HttpDenyRule) and addr in net
+        return addr in net
+    # Patterns are normalised like targets: lower-case, one trailing dot dropped.
+    return (not is_ip) and fnmatch.fnmatchcase(
+        norm_host, _normalize_name(rule.host or "")
+    )
+
+
+def enforce_egress(
+    engagement: Engagement,
+    host: str,
+    port: int,
+    method: str | None = None,
+    *,
+    now: datetime | None = None,
+    agent: AgentIdentity | None = None,
+) -> Decision:
+    """Evaluate one egress attempt against the policy (SPEC §14.5).
+
+    ``scope`` and ``actions`` never apply to egress. The order is fixed
+    and first match wins; the IMDS/link-local deny (E4) runs before any
+    allow rule and cannot be overridden by policy.
+    """
+    policy = engagement.policy
+    if now is None:
+        now = datetime.now(timezone.utc)
+    action_type = f"egress:{method}" if method is not None else "egress"
+    try:
+        _ip_check = ipaddress.ip_address(host)
+        wire_target = f"[{host}]:{port}" if _ip_check.version == 6 else f"{host}:{port}"
+    except ValueError:
+        wire_target = f"{host}:{port}"
+
+    # --- (E0) Agent identity — _check_agent returns None when the policy
+    # has no agent block, so it is safe to call directly.
+    if policy.agent is not None:
+        failure = _check_agent(policy, agent)
+        if failure is not None:
+            fail_code, fail_reason, fail_rule = failure
+            return _decide(
+                policy,
+                wire_target,
+                action_type,
+                now,
+                DecisionType.DENY,
+                fail_reason,
+                fail_code,
+                fail_rule,
+                agent,
+            )
+
+    # --- (E1) Time window -------------------------------------------------
+    if not (policy.valid_from <= now < policy.valid_until):
+        return _decide(
+            policy,
+            wire_target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "policy expired or not yet active",
+            ReasonCode.POLICY_NOT_ACTIVE,
+            "valid_from/valid_until",
+            agent,
+        )
+
+    # --- (E2) Blackout -----------------------------------------------------
+    for bw_index, bw in enumerate(policy.blackout_windows):
+        if bw.start <= now < bw.end:
+            reason = "inside blackout window"
+            if bw.reason:
+                reason = f"{reason}: {bw.reason}"
+            return _decide(
+                policy,
+                wire_target,
+                action_type,
+                now,
+                DecisionType.DENY,
+                reason,
+                ReasonCode.BLACKOUT_WINDOW,
+                f"blackout_windows[{bw_index}]",
+                agent,
+            )
+
+    # --- (E3) Validation ---------------------------------------------------
+    checked = _validate_egress_target(
+        policy, host, port, method, wire_target, action_type, now
+    )
+    if isinstance(checked, Decision):
+        return _decide(
+            policy,
+            wire_target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "egress target invalid",
+            ReasonCode.EGRESS_TARGET_INVALID,
+            "",
+            agent,
+        )
+    norm_host, is_ip, port_checked, method_checked, ip_literal = checked
+
+    # --- (E4) IMDS / link-local hard-stop ----------------------------------
+    if _is_imds_target(norm_host, is_ip, ip_literal):
+        return _decide(
+            policy,
+            wire_target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "egress to instance metadata or link-local address denied",
+            ReasonCode.EGRESS_IMDS_DENIED,
+            "",
+            agent,
+        )
+
+    # --- (E5) egress block configured? --------------------------------------
+    egress = policy.egress
+    if egress is None:
+        return _decide(
+            policy,
+            wire_target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "egress not configured in policy",
+            ReasonCode.EGRESS_NOT_CONFIGURED,
+            "egress",
+            agent,
+        )
+
+    http = egress.http
+    allow_rules: tuple[HttpAllowRule, ...] = http.allow if http is not None else ()
+    deny_rules: tuple[HttpDenyRule, ...] = http.deny if http is not None else ()
+
+    # --- (E6) explicit deny ---------------------------------------------------
+    for idx, rule in enumerate(deny_rules):
+        if _rule_matches_host(rule, norm_host, is_ip, ip_literal):
+            return _decide(
+                policy,
+                wire_target,
+                action_type,
+                now,
+                DecisionType.DENY,
+                "egress host explicitly denied",
+                ReasonCode.EGRESS_HOST_DENIED,
+                f"egress.http.deny[{idx}]",
+                agent,
+            )
+
+    # --- (E7) host not allowed -------------------------------------------------
+    host_matches: list[tuple[int, HttpAllowRule]] = [
+        (idx, rule)
+        for idx, rule in enumerate(allow_rules)
+        if _rule_matches_host(rule, norm_host, is_ip, ip_literal)
+    ]
+    if not host_matches:
+        return _decide(
+            policy,
+            wire_target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "egress host not allowed",
+            ReasonCode.EGRESS_HOST_NOT_ALLOWED,
+            "egress.http.allow",
+            agent,
+        )
+
+    # --- (E8) port not allowed on any host-matching entry -----------------------
+    port_matches: list[tuple[int, HttpAllowRule]] = [
+        (idx, rule) for idx, rule in host_matches if port_checked in rule.ports
+    ]
+    if not port_matches:
+        first_idx, _first_rule = host_matches[0]
+        return _decide(
+            policy,
+            wire_target,
+            action_type,
+            now,
+            DecisionType.DENY,
+            "egress port not allowed",
+            ReasonCode.EGRESS_PORT_NOT_ALLOWED,
+            f"egress.http.allow[{first_idx}]",
+            agent,
+        )
+
+    # --- (E9) method not allowed when every host+port match restricts methods ----
+    with_methods: list[tuple[int, HttpAllowRule]] = [
+        (idx, rule) for idx, rule in port_matches if rule.methods
+    ]
+    if with_methods and len(with_methods) == len(port_matches):
+        allowed_somewhere = any(
+            method_checked is not None and method_checked in rule.methods
+            for _idx, rule in with_methods
+        )
+        if method_checked is None or not allowed_somewhere:
+            first_idx, _rule = with_methods[0]
+            return _decide(
+                policy,
+                wire_target,
+                action_type,
+                now,
+                DecisionType.DENY,
+                "egress method not allowed",
+                ReasonCode.EGRESS_METHOD_NOT_ALLOWED,
+                f"egress.http.allow[{first_idx}]",
+                agent,
+            )
+
+    # --- (E10) allowed -----------------------------------------------------------
+    for allow_idx, allow_rule in port_matches:
+        if not allow_rule.methods or (
+            method_checked is not None and method_checked in allow_rule.methods
+        ):
+            return _decide(
+                policy,
+                wire_target,
+                action_type,
+                now,
+                DecisionType.ALLOW,
+                "egress allowed",
+                ReasonCode.EGRESS_ALLOWED,
+                f"egress.http.allow[{allow_idx}]",
+                agent,
+            )
+    # Unreachable: E9 already handled the all-restricted case.
+    return _decide(
+        policy,
+        host,
+        action_type,
+        now,
+        DecisionType.DENY,
+        "egress method not allowed",
+        ReasonCode.EGRESS_METHOD_NOT_ALLOWED,
+        "egress.http.allow",
+        agent,
+    )
+
+
 def raise_if_expired(engagement: Engagement, now: datetime | None = None) -> None:
     """Raise :class:`PolicyExpiredError` if the engagement is outside its window.
 
@@ -341,4 +703,4 @@ def raise_if_expired(engagement: Engagement, now: datetime | None = None) -> Non
         raise PolicyExpiredError(engagement_id=engagement.policy.engagement_id)
 
 
-__all__ = ["enforce", "raise_if_expired"]
+__all__ = ["enforce", "enforce_egress", "raise_if_expired"]

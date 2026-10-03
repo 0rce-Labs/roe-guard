@@ -40,8 +40,13 @@ from roe_guard.models import (
     ApprovalSpec,
     BlackoutWindow,
     CredentialSpec,
+    DnsEgressSpec,
+    EgressSpec,
     EnforcementMode,
     FilesystemSpec,
+    HttpAllowRule,
+    HttpDenyRule,
+    HttpEgressSpec,
     Policy,
     ResourceSpec,
     SandboxSpec,
@@ -242,6 +247,7 @@ _TOP_KEYS = frozenset(
         "sandbox",
         "approval",
         "agent",
+        "egress",
     }
 )
 _V2_RESERVED_TOP = frozenset({"mode", "agent", "sandbox", "egress", "approval"})
@@ -258,6 +264,15 @@ _RESOURCE_KEYS = frozenset({"pids_max", "memory_max", "cpu_max"})
 _CREDENTIAL_KEYS = frozenset({"max_ttl_seconds"})
 _APPROVAL_KEYS = frozenset({"timeout_seconds", "on_timeout"})
 _AGENT_KEYS = frozenset({"id", "runtime"})
+_EGRESS_KEYS = frozenset({"default", "http", "dns"})
+_EGRESS_HTTP_KEYS = frozenset({"allow", "deny"})
+_EGRESS_ALLOW_KEYS = frozenset({"host", "cidr", "ports", "methods"})
+_EGRESS_DENY_KEYS = frozenset({"host", "cidr"})
+_EGRESS_DNS_KEYS = frozenset({"allow", "deny", "record_types"})
+_DNS_RECORD_TYPES = frozenset({"A", "AAAA", "CNAME"})
+_METHOD_RE = re.compile(r"^[A-Z]+$", re.ASCII)
+_LABEL_RE = re.compile(r"^([a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])$", re.ASCII)
+_NUMERIC_LABEL_RE = re.compile(r"^(0x[0-9a-f]*|[0-9]+)$", re.ASCII)
 _INT_VALUE_RE = re.compile(r"^[0-9]+$", re.ASCII)
 
 
@@ -549,6 +564,9 @@ def _parse_policy(raw: dict[str, Any], *, _stacklevel: int) -> Policy:
     # --- agent (v2) -------------------------------------------------------
     agent = _parse_agent(raw.get("agent")) if "agent" in raw else None
 
+    # --- egress (v2) -------------------------------------------------------
+    egress = _parse_egress(raw.get("egress")) if "egress" in raw else None
+
     # --- top-level x-* extensions (v1 and v2) ------------------------------
     extensions = {
         key: value
@@ -572,6 +590,7 @@ def _parse_policy(raw: dict[str, Any], *, _stacklevel: int) -> Policy:
         approval=approval,
         extensions=extensions,
         agent=agent,
+        egress=egress,
     )
 
 
@@ -724,6 +743,211 @@ def _parse_sandbox(raw: Any) -> SandboxSpec:
         credentials=credentials,
         imds=imds,
     )
+
+
+def _parse_egress(raw: Any) -> EgressSpec:
+    if not isinstance(raw, dict):
+        raise PolicyParseError(
+            f"'egress' must be a mapping, got {type(raw).__name__}",
+            field="egress",
+        )
+    _check_keys(raw, _EGRESS_KEYS, path="egress", strict=True, ignored=[])
+    default = raw.get("default", "deny")
+    if default != "deny":
+        raise PolicyParseError(
+            f"'egress.default' accepts only 'deny', got {default!r}",
+            field="egress.default",
+        )
+    http = None
+    if "http" in raw:
+        http_raw = raw["http"]
+        if not isinstance(http_raw, dict):
+            raise PolicyParseError(
+                f"'egress.http' must be a mapping, got {type(http_raw).__name__}",
+                field="egress.http",
+            )
+        _check_keys(
+            http_raw, _EGRESS_HTTP_KEYS, path="egress.http", strict=True, ignored=[]
+        )
+        allow_rules = []
+        allow_raw = http_raw.get("allow", [])
+        # A null list is rejected, never treated as empty (SPEC §14.2).
+        if allow_raw is None:
+            raise PolicyParseError(
+                "'egress.http.allow' must be a list, got NoneType",
+                field="egress.http.allow",
+            )
+        if not isinstance(allow_raw, list):
+            raise PolicyParseError(
+                f"'egress.http.allow' must be a list, got {type(allow_raw).__name__}",
+                field="egress.http.allow",
+            )
+        for idx, entry in enumerate(allow_raw):
+            allow_rules.append(_parse_egress_allow_entry(entry, idx))
+        deny_rules = []
+        deny_raw = http_raw.get("deny", [])
+        if deny_raw is None:
+            raise PolicyParseError(
+                "'egress.http.deny' must be a list, got NoneType",
+                field="egress.http.deny",
+            )
+        if not isinstance(deny_raw, list):
+            raise PolicyParseError(
+                f"'egress.http.deny' must be a list, got {type(deny_raw).__name__}",
+                field="egress.http.deny",
+            )
+        for idx, entry in enumerate(deny_raw):
+            deny_rules.append(_parse_egress_deny_entry(entry, idx))
+        http = HttpEgressSpec(allow=tuple(allow_rules), deny=tuple(deny_rules))
+    dns = None
+    if "dns" in raw:
+        dns_raw = raw["dns"]
+        if not isinstance(dns_raw, dict):
+            raise PolicyParseError(
+                f"'egress.dns' must be a mapping, got {type(dns_raw).__name__}",
+                field="egress.dns",
+            )
+        _check_keys(
+            dns_raw, _EGRESS_DNS_KEYS, path="egress.dns", strict=True, ignored=[]
+        )
+        dns_allow = _parse_str_tuple_list(
+            dns_raw.get("allow", []), field="egress.dns.allow"
+        )
+        dns_deny = _parse_str_tuple_list(
+            dns_raw.get("deny", []), field="egress.dns.deny"
+        )
+        record_types_raw = dns_raw.get("record_types", ["A", "AAAA"])
+        if record_types_raw is None:
+            raise PolicyParseError(
+                "'egress.dns.record_types' must be a list, got NoneType",
+                field="egress.dns.record_types",
+            )
+        if not isinstance(record_types_raw, list) or not record_types_raw:
+            raise PolicyParseError(
+                f"'egress.dns.record_types' must be a non-empty list, got {record_types_raw!r}",
+                field="egress.dns.record_types",
+            )
+        record_items = []
+        for idx, item in enumerate(record_types_raw):
+            if not isinstance(item, str) or item not in _DNS_RECORD_TYPES:
+                raise PolicyParseError(
+                    f"'egress.dns.record_types[{idx}]' must be one of A, AAAA, CNAME, got {item!r}",
+                    field=f"egress.dns.record_types[{idx}]",
+                )
+            record_items.append(item)
+        if len(set(record_items)) != len(record_items):
+            raise PolicyParseError(
+                "'egress.dns.record_types' entries must be unique",
+                field="egress.dns.record_types",
+            )
+        dns = DnsEgressSpec(
+            allow=dns_allow, deny=dns_deny, record_types=tuple(record_items)
+        )
+    return EgressSpec(default=default, http=http, dns=dns)
+
+
+def _parse_egress_host_or_cidr(
+    entry: dict[str, Any], field: str
+) -> tuple[str | None, str | None]:
+    # Key presence decides "exactly one"; an explicit null is a type error.
+    if ("host" in entry) == ("cidr" in entry):
+        raise PolicyParseError(
+            f"'{field}' requires exactly one of 'host' or 'cidr'",
+            field=field,
+        )
+    if "host" in entry:
+        host = entry["host"]
+        if not isinstance(host, str) or not host:
+            raise PolicyParseError(
+                f"'{field}.host' must be a non-empty string, got {host!r}",
+                field=f"{field}.host",
+            )
+        return host, None
+    return None, _validate_cidr(entry["cidr"], field=f"{field}.cidr")
+
+
+def _parse_egress_allow_entry(entry: Any, idx: int) -> HttpAllowRule:
+    field = f"egress.http.allow[{idx}]"
+    if not isinstance(entry, dict):
+        raise PolicyParseError(
+            f"expected mapping, got {type(entry).__name__}",
+            field=field,
+        )
+    _check_keys(entry, _EGRESS_ALLOW_KEYS, path=field, strict=True, ignored=[])
+    host, cidr = _parse_egress_host_or_cidr(entry, field)
+    if "ports" not in entry:
+        raise PolicyParseError(
+            f"missing required field: {field}.ports",
+            field=f"{field}.ports",
+        )
+    ports_raw = entry["ports"]
+    if ports_raw is None:
+        raise PolicyParseError(
+            f"'{field}.ports' must be a list, got NoneType",
+            field=f"{field}.ports",
+        )
+    if not isinstance(ports_raw, list) or not ports_raw:
+        raise PolicyParseError(
+            f"'{field}.ports' must be a non-empty list, got {ports_raw!r}",
+            field=f"{field}.ports",
+        )
+    ports = []
+    for j, port in enumerate(ports_raw):
+        if isinstance(port, bool) or not isinstance(port, int):
+            raise PolicyParseError(
+                f"'{field}.ports[{j}]' must be an integer, got {type(port).__name__}",
+                field=f"{field}.ports[{j}]",
+            )
+        if port < 1 or port > 65535:
+            raise PolicyParseError(
+                f"'{field}.ports[{j}]' must be in 1..65535, got {port}",
+                field=f"{field}.ports[{j}]",
+            )
+        ports.append(port)
+    if "methods" not in entry:
+        methods_raw = []
+    else:
+        methods_raw = entry["methods"]
+        if methods_raw is None:
+            raise PolicyParseError(
+                f"'{field}.methods' must be a list, got NoneType",
+                field=f"{field}.methods",
+            )
+        if not isinstance(methods_raw, list):
+            raise PolicyParseError(
+                f"'{field}.methods' must be a list, got {type(methods_raw).__name__}",
+                field=f"{field}.methods",
+            )
+        if not methods_raw:
+            # Given methods must be non-empty: [] would silently turn "no
+            # methods" into "every method" at E9 (SPEC §14.2).
+            raise PolicyParseError(
+                f"'{field}.methods' must be a non-empty list, got []",
+                field=f"{field}.methods",
+            )
+    methods = []
+    for j, method in enumerate(methods_raw):
+        if not isinstance(method, str) or not _METHOD_RE.fullmatch(method):
+            raise PolicyParseError(
+                f"'{field}.methods[{j}]' must match ^[A-Z]+$, got {method!r}",
+                field=f"{field}.methods[{j}]",
+            )
+        methods.append(method)
+    return HttpAllowRule(
+        host=host, cidr=cidr, ports=tuple(ports), methods=tuple(methods)
+    )
+
+
+def _parse_egress_deny_entry(entry: Any, idx: int) -> HttpDenyRule:
+    field = f"egress.http.deny[{idx}]"
+    if not isinstance(entry, dict):
+        raise PolicyParseError(
+            f"expected mapping, got {type(entry).__name__}",
+            field=field,
+        )
+    _check_keys(entry, _EGRESS_DENY_KEYS, path=field, strict=True, ignored=[])
+    host, cidr = _parse_egress_host_or_cidr(entry, field)
+    return HttpDenyRule(host=host, cidr=cidr)
 
 
 def _parse_agent(raw: Any) -> AgentSpec:

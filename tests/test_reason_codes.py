@@ -111,8 +111,8 @@ def test_step8_fail_closed(engagement):
 
 
 def test_reason_code_member_count_grows_with_ladder():
-    # T20 added 9; T21 adds the three AGENT_ codes.
-    assert len(ReasonCode) == 12
+    # T20 added 9; T21 the three AGENT_ codes; T22 the eight EGRESS_ codes.
+    assert len(ReasonCode) == 20
 
 
 def test_reason_code_value_equals_name():
@@ -143,6 +143,14 @@ def test_reason_code_names():
         "AGENT_ID_MISSING",
         "AGENT_ID_MISMATCH",
         "AGENT_RUNTIME_NOT_ALLOWED",
+        "EGRESS_TARGET_INVALID",
+        "EGRESS_IMDS_DENIED",
+        "EGRESS_NOT_CONFIGURED",
+        "EGRESS_HOST_DENIED",
+        "EGRESS_HOST_NOT_ALLOWED",
+        "EGRESS_PORT_NOT_ALLOWED",
+        "EGRESS_METHOD_NOT_ALLOWED",
+        "EGRESS_ALLOWED",
     }
 
 
@@ -196,6 +204,7 @@ def test_new_fields_are_appended():
         "extensions",
         "source_sha256",
         "agent",
+        "egress",
     ]
     assert [f.name for f in fields(Decision)][5:] == [
         "mode",
