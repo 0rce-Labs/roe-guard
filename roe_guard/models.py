@@ -62,6 +62,14 @@ class ReasonCode(str, Enum):
     AGENT_ID_MISSING = "AGENT_ID_MISSING"
     AGENT_ID_MISMATCH = "AGENT_ID_MISMATCH"
     AGENT_RUNTIME_NOT_ALLOWED = "AGENT_RUNTIME_NOT_ALLOWED"
+    EGRESS_TARGET_INVALID = "EGRESS_TARGET_INVALID"
+    EGRESS_IMDS_DENIED = "EGRESS_IMDS_DENIED"
+    EGRESS_NOT_CONFIGURED = "EGRESS_NOT_CONFIGURED"
+    EGRESS_HOST_DENIED = "EGRESS_HOST_DENIED"
+    EGRESS_HOST_NOT_ALLOWED = "EGRESS_HOST_NOT_ALLOWED"
+    EGRESS_PORT_NOT_ALLOWED = "EGRESS_PORT_NOT_ALLOWED"
+    EGRESS_METHOD_NOT_ALLOWED = "EGRESS_METHOD_NOT_ALLOWED"
+    EGRESS_ALLOWED = "EGRESS_ALLOWED"
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +109,58 @@ class CredentialSpec:
     """sandbox.credentials: short-lived credential ceiling (validated only)."""
 
     max_ttl_seconds: int | None = None
+
+
+@dataclass(frozen=True)
+class HttpAllowRule:
+    """egress.http.allow entry: exactly one of host / cidr (post_init)."""
+
+    host: str | None = None
+    cidr: str | None = None
+    ports: tuple[int, ...] = ()
+    methods: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if (self.host is None) == (self.cidr is None):
+            raise ValueError("HttpAllowRule requires exactly one of 'host' or 'cidr'")
+
+
+@dataclass(frozen=True)
+class HttpDenyRule:
+    """egress.http.deny entry: exactly one of host / cidr (post_init)."""
+
+    host: str | None = None
+    cidr: str | None = None
+
+    def __post_init__(self) -> None:
+        if (self.host is None) == (self.cidr is None):
+            raise ValueError("HttpDenyRule requires exactly one of 'host' or 'cidr'")
+
+
+@dataclass(frozen=True)
+class HttpEgressSpec:
+    """egress.http: allow and deny rule tuples."""
+
+    allow: tuple[HttpAllowRule, ...] = ()
+    deny: tuple[HttpDenyRule, ...] = ()
+
+
+@dataclass(frozen=True)
+class DnsEgressSpec:
+    """egress.dns: validated only; the platform resolver enforces it."""
+
+    allow: tuple[str, ...] = ()
+    deny: tuple[str, ...] = ()
+    record_types: tuple[str, ...] = ("A", "AAAA")
+
+
+@dataclass(frozen=True)
+class EgressSpec:
+    """egress block; default accepts only "deny" (validated in the loader)."""
+
+    default: str = "deny"
+    http: HttpEgressSpec | None = None
+    dns: DnsEgressSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -235,6 +295,7 @@ class Policy:
     extensions: dict[str, Any] = field(default_factory=dict)
     source_sha256: str = ""
     agent: AgentSpec | None = None
+    egress: EgressSpec | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +360,20 @@ class Engagement:
             now=now,
             agent=agent,
         )
+
+    def check_egress(
+        self,
+        host: str,
+        port: int,
+        method: str | None = None,
+        *,
+        now: datetime | None = None,
+        agent: AgentIdentity | None = None,
+    ) -> Decision:
+        """Evaluate one egress attempt (thin wrapper over enforce_egress)."""
+        from roe_guard.engine import enforce_egress
+
+        return enforce_egress(self, host, port, method, now=now, agent=agent)
 
     def window(self) -> Any:
         """Activate this engagement as a context manager (spec §6).
@@ -429,9 +504,14 @@ __all__ = [
     "CredentialSpec",
     "Decision",
     "DecisionType",
+    "DnsEgressSpec",
+    "EgressSpec",
     "EnforcementMode",
     "Engagement",
     "FilesystemSpec",
+    "HttpAllowRule",
+    "HttpDenyRule",
+    "HttpEgressSpec",
     "Policy",
     "ReasonCode",
     "ResourceSpec",

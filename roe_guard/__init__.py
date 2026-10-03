@@ -12,7 +12,7 @@ chain through :class:`AuditLog`.
 """
 
 from roe_guard.audit import GENESIS_PREV_HASH, AuditLog
-from roe_guard.engine import enforce, raise_if_expired
+from roe_guard.engine import enforce, enforce_egress, raise_if_expired
 from roe_guard.exceptions import (
     ApprovalRequiredError,
     AuditIntegrityError,
@@ -34,9 +34,14 @@ from roe_guard.models import (
     CredentialSpec,
     Decision,
     DecisionType,
+    DnsEgressSpec,
+    EgressSpec,
     EnforcementMode,
     Engagement,
     FilesystemSpec,
+    HttpAllowRule,
+    HttpDenyRule,
+    HttpEgressSpec,
     Policy,
     ReasonCode,
     ResourceSpec,
@@ -64,9 +69,14 @@ __all__ = [
     "CredentialSpec",
     "Decision",
     "DecisionType",
+    "DnsEgressSpec",
+    "EgressSpec",
     "EnforcementMode",
     "Engagement",
     "FilesystemSpec",
+    "HttpAllowRule",
+    "HttpDenyRule",
+    "HttpEgressSpec",
     "OutOfScopeError",
     "Policy",
     "PolicyExpiredError",
@@ -81,6 +91,7 @@ __all__ = [
     "UnknownKeyWarning",
     "__version__",
     "enforce",
+    "enforce_egress",
     "guarded",
     "load_policy",
     "parse_policy",
