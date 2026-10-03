@@ -20,6 +20,7 @@ from typing import Any
 
 from roe_guard.exceptions import PolicyExpiredError
 from roe_guard.models import (
+    AgentIdentity,
     Decision,
     DecisionType,
     Engagement,
@@ -87,6 +88,7 @@ def _decide(
     reason: str,
     code: ReasonCode,
     rule: str,
+    agent: AgentIdentity | None = None,
 ) -> Decision:
     """Single Decision constructor: fills mode, reason_code and matched_rule.
 
@@ -101,7 +103,37 @@ def _decide(
         mode=policy.mode,
         reason_code=code.value,
         matched_rule=rule,
+        agent_id=agent.id if agent is not None and isinstance(agent.id, str) else "",
     )
+
+
+def _check_agent(
+    policy: Policy, agent: AgentIdentity | None
+) -> tuple[ReasonCode, str, str] | None:
+    """Ladder step 0; runs only when the policy has an agent block.
+
+    Returns ``(code, reason, matched_rule)`` on failure and ``None`` on
+    pass. Matching is ``fnmatch.fnmatchcase`` — case-sensitive, ``*`` also
+    covers ``/``.
+    """
+    spec = policy.agent
+    if spec is None:  # no agent block: step 0 does not apply
+        return None
+    if agent is None or not isinstance(agent.id, str) or agent.id == "":
+        return (ReasonCode.AGENT_ID_MISSING, "agent identity missing", "agent.id")
+    if not fnmatch.fnmatchcase(agent.id, spec.id):
+        return (
+            ReasonCode.AGENT_ID_MISMATCH,
+            "agent identity does not match policy",
+            "agent.id",
+        )
+    if spec.runtime and (agent.runtime is None or agent.runtime not in spec.runtime):
+        return (
+            ReasonCode.AGENT_RUNTIME_NOT_ALLOWED,
+            "agent runtime not allowed",
+            "agent.runtime",
+        )
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -115,11 +147,17 @@ def enforce(
     action_type: str,
     now: datetime | None = None,
     metadata: dict[str, Any] | None = None,
+    *,
+    agent: AgentIdentity | None = None,
 ) -> Decision:
     """Evaluate *one* action against the engagement policy (spec §5).
 
-    The 8-step priority order is intentional and MUST NOT be reordered:
+    The priority order is intentional and MUST NOT be reordered. Step 0
+    runs only when the policy has an ``agent`` block; steps 1-8 are the v1
+    ladder, unchanged:
 
+        0. agent missing / id not matching / runtime not allowed → DENY
+           (AGENT_ID_MISSING, AGENT_ID_MISMATCH, AGENT_RUNTIME_NOT_ALLOWED)
         1. now < valid_from  OR  now >= valid_until  → DENY (expired)
         2. now in any blackout_window                   → DENY
         3. target in scope.deny                         → DENY (deny > allow)
@@ -136,6 +174,12 @@ def enforce(
         now:         Override the evaluation time (UTC). Defaults to
             ``datetime.now(timezone.utc)``. Used for testability.
         metadata:    Optional extra context for audit logging (T5).
+        agent:       Keyword-only caller identity. When the policy has an
+            ``agent`` block, a call without an identity (CLI ``check``,
+            ``guarded`` without ``agent=``) is always DENY with
+            ``AGENT_ID_MISSING`` (fail-closed). When the policy has no
+            ``agent`` block, step 0 is skipped and the identity is only
+            recorded in ``Decision.agent_id`` (``""`` when absent).
 
     Returns:
         A :class:`~roe_guard.models.Decision` with the resolved outcome,
@@ -151,6 +195,23 @@ def enforce(
     if now is None:
         now = datetime.now(timezone.utc)
 
+    # --- (0) Agent identity (only when the policy has an agent block) ----
+    if policy.agent is not None:
+        failure = _check_agent(policy, agent)
+        if failure is not None:
+            code, reason, rule = failure
+            return _decide(
+                policy,
+                target,
+                action_type,
+                now,
+                DecisionType.DENY,
+                reason,
+                code,
+                rule,
+                agent,
+            )
+
     # --- (a) Time-window check -------------------------------------------
     if not (policy.valid_from <= now < policy.valid_until):
         return _decide(
@@ -162,6 +223,7 @@ def enforce(
             "policy expired or not yet active",
             ReasonCode.POLICY_NOT_ACTIVE,
             "valid_from/valid_until",
+            agent,
         )
 
     # --- (b) Blackout-window check --------------------------------------
@@ -179,6 +241,7 @@ def enforce(
                 reason,
                 ReasonCode.BLACKOUT_WINDOW,
                 f"blackout_windows[{bw_index}]",
+                agent,
             )
 
     # --- (c) Explicit deny overrides allow ------------------------------
@@ -193,6 +256,7 @@ def enforce(
             "target explicitly denied in scope",
             ReasonCode.TARGET_DENIED,
             f"scope.deny[{deny_index}]",
+            agent,
         )
 
     # --- (d) Target must be in scope.allow ------------------------------
@@ -206,6 +270,7 @@ def enforce(
             "target not in allowed scope",
             ReasonCode.TARGET_NOT_IN_SCOPE,
             "scope.allow",
+            agent,
         )
 
     # --- (e) actions.deny check -----------------------------------------
@@ -219,6 +284,7 @@ def enforce(
             f"action type {action_type!r} explicitly denied",
             ReasonCode.ACTION_DENIED,
             "actions.deny",
+            agent,
         )
 
     # --- (f) approval_required_for check (NOT ALLOW) --------------------
@@ -232,6 +298,7 @@ def enforce(
             f"action type {action_type!r} requires human approval",
             ReasonCode.APPROVAL_REQUIRED,
             "approval_required_for",
+            agent,
         )
 
     # --- (g) actions.allow check ----------------------------------------
@@ -245,6 +312,7 @@ def enforce(
             f"action type {action_type!r} allowed",
             ReasonCode.ACTION_ALLOWED,
             "actions.allow",
+            agent,
         )
 
     # --- (h) Fail-closed default ----------------------------------------
@@ -257,6 +325,7 @@ def enforce(
         "action type not explicitly allowed",
         ReasonCode.ACTION_NOT_ALLOWED,
         "",
+        agent,
     )
 
 

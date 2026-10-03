@@ -34,7 +34,7 @@ from typing import Any
 
 from roe_guard.engine import enforce
 from roe_guard.exceptions import ApprovalRequiredError, OutOfScopeError
-from roe_guard.models import Decision, DecisionType, Engagement
+from roe_guard.models import AgentIdentity, Decision, DecisionType, Engagement
 
 
 def _resolve_target(
@@ -71,6 +71,8 @@ def guarded(
     engagement: Engagement,
     action_type: str,
     target_arg: str = "target",
+    *,
+    agent: AgentIdentity | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator factory: enforce scope on every call of the wrapped function.
 
@@ -79,6 +81,9 @@ def guarded(
         action_type: The action type this function represents.
         target_arg:  Name of the wrapped function's parameter (positional
             or keyword) that carries the target string.
+        agent:       Keyword-only caller identity passed to every check.
+            When the policy has an ``agent`` block and no identity is given,
+            every call is denied (``AGENT_ID_MISSING``, fail-closed).
 
     Returns:
         A decorator that checks scope before invoking the wrapped function
@@ -97,7 +102,7 @@ def guarded(
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             target = _resolve_target(sig, args, kwargs, target_arg)
-            decision: Decision = enforce(engagement, target, action_type)
+            decision: Decision = enforce(engagement, target, action_type, agent=agent)
             outcome = decision.outcome
 
             if outcome is DecisionType.DENY:

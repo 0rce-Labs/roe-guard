@@ -25,6 +25,8 @@ from roe_guard.exceptions import (
 from roe_guard.integrations.context import window
 from roe_guard.integrations.decorator import guarded
 from roe_guard.models import (
+    AgentIdentity,
+    AgentSpec,
     ApprovalSpec,
     AuditEntry,
     AuditVerificationResult,
@@ -50,6 +52,8 @@ __version__ = "0.1.0a1"
 __all__ = [
     "GENESIS_PREV_HASH",
     "MAX_SCHEMA_VERSION",
+    "AgentIdentity",
+    "AgentSpec",
     "ApprovalRequiredError",
     "ApprovalSpec",
     "AuditEntry",

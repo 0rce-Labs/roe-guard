@@ -59,6 +59,9 @@ class ReasonCode(str, Enum):
     APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
     ACTION_ALLOWED = "ACTION_ALLOWED"
     ACTION_NOT_ALLOWED = "ACTION_NOT_ALLOWED"
+    AGENT_ID_MISSING = "AGENT_ID_MISSING"
+    AGENT_ID_MISMATCH = "AGENT_ID_MISMATCH"
+    AGENT_RUNTIME_NOT_ALLOWED = "AGENT_RUNTIME_NOT_ALLOWED"
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +101,22 @@ class CredentialSpec:
     """sandbox.credentials: short-lived credential ceiling (validated only)."""
 
     max_ttl_seconds: int | None = None
+
+
+@dataclass(frozen=True)
+class AgentSpec:
+    """agent block: caller identity glob plus optional runtime allowlist."""
+
+    id: str
+    runtime: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AgentIdentity:
+    """Caller-supplied identity; roe-guard only matches it, never verifies it."""
+
+    id: str
+    runtime: str | None = None
 
 
 @dataclass(frozen=True)
@@ -215,6 +234,7 @@ class Policy:
     approval: ApprovalSpec | None = None
     extensions: dict[str, Any] = field(default_factory=dict)
     source_sha256: str = ""
+    agent: AgentSpec | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -259,11 +279,15 @@ class Engagement:
         target: str,
         action_type: str,
         now: datetime | None = None,
+        *,
+        agent: AgentIdentity | None = None,
     ) -> Decision:
         """Evaluate a single action against the policy.
 
         Thin wrapper around :func:`roe_guard.engine.enforce` that binds
-        the engagement automatically.
+        the engagement automatically. ``agent`` is the keyword-only caller
+        identity; when the policy has an ``agent`` block, a check without
+        it is always DENY (``AGENT_ID_MISSING``, fail-closed).
         """
         # Local import to avoid circular dependency at module load time.
         from roe_guard.engine import enforce
@@ -273,6 +297,7 @@ class Engagement:
             target=target,
             action_type=action_type,
             now=now,
+            agent=agent,
         )
 
     def window(self) -> Any:
@@ -315,6 +340,7 @@ class Decision:
     mode: EnforcementMode = EnforcementMode.ENFORCE
     reason_code: str = ""
     matched_rule: str = ""
+    agent_id: str = ""
 
     @property
     def allowed(self) -> bool:
@@ -394,6 +420,8 @@ class AuditVerificationResult:
 
 
 __all__ = [
+    "AgentIdentity",
+    "AgentSpec",
     "ApprovalSpec",
     "AuditEntry",
     "AuditVerificationResult",
