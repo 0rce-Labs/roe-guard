@@ -559,7 +559,7 @@ açık karardır (§12).
 
 ### 14.8 JSON Schema ve conformance
 
-- Dosyalar: `schema/policy.v1.json`, `schema/policy.v2.json`, `schema/audit-record.v2.json`, `schema/audit-checkpoint.v2.json`. Hepsi JSON Schema draft 2020-12'dir. Şema yapısaldır; tarih sırası, CIDR geçerliliği, ISO-8601 ayrıştırması, desenlerin tam ve ASCII anlamıyla eşleşmesi (§14.1) ve `int` istenen yerde tam sayı değerli kayan noktalı sayının (ör. `2.0`) reddi yalnız yükleyicide yapılır. JSON Schema `2.0`'ı tam sayı sayar ve Python `jsonschema` desenleri `re.search` ile uygular.
+- Dosyalar: `schema/policy.v1.json`, `schema/policy.v2.json`, `schema/audit-record.v2.json`, `schema/audit-checkpoint.v2.json`. Hepsi JSON Schema draft 2020-12'dir. Şema yapısaldır. Tarih sırası, CIDR geçerliliği ve ISO-8601 ayrıştırması yalnız politika yükleyicisinde yapılır. Desenlerin tam ve ASCII anlamıyla eşleşmesi (§14.1) ve `int` istenen yerde tam sayı değerli kayan noktalı sayının (ör. `2.0`) reddi şemada değil kodda yapılır: politika dosyalarında yükleyicide, audit kayıtlarında ve checkpoint'lerde yazıcıda (`record()`, `checkpoint()`) ve doğrulayıcıda (`verify_chain`). JSON Schema `2.0`'ı tam sayı sayar ve Python `jsonschema` desenleri `re.search` ile uygular.
 - `conformance/cases/*.json` dosyalarının biçimi `{"format": 1, "suite": ..., "cases": [{id, description, policy, input, expected: {verdict, reason_code}}]}`.
 - `conformance/audit/` ve `conformance/jcs/` audit v2 ve JCS vektörlerini içerir.
 - Tüketiciler vektörleri roe-guard commit SHA'sıyla sabitler. Bilinmeyen `format` değeri tüketicide hatadır.

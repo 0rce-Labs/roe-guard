@@ -137,11 +137,30 @@ def test_v1_schema_rejects_other_versions():
 
 
 def test_v2_keeps_v1_field_types():
-    # v1 fields keep their v1 types in v2: a null list or null actions block is accepted.
+    # v1 fields keep their v1 types in v2: null lists and a null actions block are accepted.
     for key in ("actions", "blackout_windows", "approval_required_for", "approvers"):
         document = load_yaml(FIXTURES_V2 / "valid_minimal.yaml")
         document[key] = None
         assert v2_errors(document) == [], key
+    nested = [
+        {"scope": {"allow": None}},
+        {"scope": {"allow": [{"hostname": "*.api.example.com"}], "deny": None}},
+        {"actions": {"allow": None}},
+        {"actions": {"allow": ["tool.http.get"], "deny": None}},
+        {
+            "blackout_windows": [
+                {
+                    "start": "2026-10-01T01:00:00Z",
+                    "end": "2026-10-01T02:00:00Z",
+                    "reason": None,
+                }
+            ]
+        },
+    ]
+    for patch in nested:
+        document = load_yaml(FIXTURES_V2 / "valid_minimal.yaml")
+        document.update(patch)
+        assert v2_errors(document) == [], patch
 
 
 def test_v2_rejects_null_new_blocks():
@@ -238,6 +257,41 @@ def test_v2_rejects_unknown_key_in_every_block():
         assert v2_errors(document), (
             f"unknown nested key {patch!r} must fail the v2 schema"
         )
+
+
+def test_v2_accepts_x_keys_in_every_object():
+    x = {"x-n": 1}
     document = load_yaml(FIXTURES_V2 / "valid_minimal.yaml")
-    document["sandbox"] = {"x-note": "n", "filesystem": {"x-note": "n"}}
-    assert v2_errors(document) == [], "x- keys are allowed at every level"
+    document.update(
+        {
+            "x-root": 1,
+            "scope": {
+                "allow": [{"hostname": "*.api.example.com", **x}],
+                "deny": None,
+                **x,
+            },
+            "actions": {"allow": ["tool.http.get"], **x},
+            "blackout_windows": [
+                {"start": "2026-10-01T01:00:00Z", "end": "2026-10-01T02:00:00Z", **x}
+            ],
+            "agent": {"id": "spiffe://example.org/a", **x},
+            "sandbox": {
+                "filesystem": {**x},
+                "syscalls": {**x},
+                "resources": {**x},
+                "credentials": {**x},
+                **x,
+            },
+            "egress": {
+                "http": {
+                    "allow": [{"host": "api.example.com", "ports": [443], **x}],
+                    "deny": [{"host": "bad.example.com", **x}],
+                    **x,
+                },
+                "dns": {**x},
+                **x,
+            },
+            "approval": {"timeout_seconds": 60, **x},
+        }
+    )
+    assert v2_errors(document) == []
