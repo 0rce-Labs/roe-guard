@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- v2 policy loading: `mode` (`EnforcementMode`, default `enforce`), `sandbox`, `approval`, top-level `x-*` extensions, `parse_policy()`, `Policy.source_sha256`; `Decision.reason_code` / `matched_rule`.
+
 - JSON Schema (draft 2020-12) files `schema/policy.v1.json` and `schema/policy.v2.json`.
 
 - Top-level public API exports (`from roe_guard import Engagement, guarded, ...`) and a working `Engagement.from_file()`.

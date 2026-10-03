@@ -13,6 +13,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 NOW = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
 
 EXPECTED_ALL = [
+    "ApprovalSpec",
     "ApprovalRequiredError",
     "AuditEntry",
     "AuditIntegrityError",
@@ -25,6 +26,14 @@ EXPECTED_ALL = [
     "GENESIS_PREV_HASH",
     "MAX_SCHEMA_VERSION",
     "OutOfScopeError",
+    "parse_policy",
+    "SyscallSpec",
+    "SandboxSpec",
+    "ResourceSpec",
+    "ReasonCode",
+    "FilesystemSpec",
+    "EnforcementMode",
+    "CredentialSpec",
     "Policy",
     "PolicyExpiredError",
     "PolicyParseError",

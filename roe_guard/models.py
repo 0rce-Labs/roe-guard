@@ -35,6 +35,90 @@ class DecisionType(str, Enum):
     REQUIRES_APPROVAL = "REQUIRES_APPROVAL"
 
 
+class EnforcementMode(str, Enum):
+    """How the platform treats DENY decisions (SPEC §14.3).
+
+    ENFORCE  — DENY blocks the action (default).
+    OBSERVE  — the verdict is recorded but the action passes; DENYs are
+               still attempt-level signals. Hard-stops stay enforced.
+    """
+
+    ENFORCE = "enforce"
+    OBSERVE = "observe"
+
+
+class ReasonCode(str, Enum):
+    """Machine-readable ladder step codes (SPEC §14.4); value == name."""
+
+    POLICY_INVALID = "POLICY_INVALID"
+    POLICY_NOT_ACTIVE = "POLICY_NOT_ACTIVE"
+    BLACKOUT_WINDOW = "BLACKOUT_WINDOW"
+    TARGET_DENIED = "TARGET_DENIED"
+    TARGET_NOT_IN_SCOPE = "TARGET_NOT_IN_SCOPE"
+    ACTION_DENIED = "ACTION_DENIED"
+    APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
+    ACTION_ALLOWED = "ACTION_ALLOWED"
+    ACTION_NOT_ALLOWED = "ACTION_NOT_ALLOWED"
+
+
+# ---------------------------------------------------------------------------
+# v2 sandbox / approval specs (SPEC §14.2) — validated only; enforcement is
+# the enforcing platform's job.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FilesystemSpec:
+    """sandbox.filesystem globs; lists are tuples for deep immutability."""
+
+    read: tuple[str, ...] = ()
+    write: tuple[str, ...] = ()
+    deny: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SyscallSpec:
+    """sandbox.syscalls: optional named profile plus denied syscalls."""
+
+    profile: str | None = None
+    deny: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ResourceSpec:
+    """sandbox.resources: cgroup-level limits (validated only)."""
+
+    pids_max: int | None = None
+    memory_max: str | None = None
+    cpu_max: str | None = None
+
+
+@dataclass(frozen=True)
+class CredentialSpec:
+    """sandbox.credentials: short-lived credential ceiling (validated only)."""
+
+    max_ttl_seconds: int | None = None
+
+
+@dataclass(frozen=True)
+class SandboxSpec:
+    """sandbox block; imds accepts only "deny" (validated in the loader)."""
+
+    filesystem: FilesystemSpec | None = None
+    syscalls: SyscallSpec | None = None
+    resources: ResourceSpec | None = None
+    credentials: CredentialSpec | None = None
+    imds: str = "deny"
+
+
+@dataclass(frozen=True)
+class ApprovalSpec:
+    """approval block; on_timeout accepts only "deny" (fail-closed)."""
+
+    timeout_seconds: int
+    on_timeout: str = "deny"
+
+
 # ---------------------------------------------------------------------------
 # Scope
 # ---------------------------------------------------------------------------
@@ -126,6 +210,11 @@ class Policy:
     approval_required_for: list[str] = field(default_factory=list)
     approvers: list[str] = field(default_factory=list)
     schema_version: int = 1
+    mode: EnforcementMode = EnforcementMode.ENFORCE
+    sandbox: SandboxSpec | None = None
+    approval: ApprovalSpec | None = None
+    extensions: dict[str, Any] = field(default_factory=dict)
+    source_sha256: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +243,10 @@ class Engagement:
         """Load a policy from a YAML file and return an :class:`Engagement`.
 
         Raises :class:`roe_guard.exceptions.PolicyParseError` if the file
-        does not exist, is not valid YAML, or fails policy validation (see
-        :func:`roe_guard.policy.load_policy`).  Other OS or decoding errors
-        (e.g. ``IsADirectoryError``, ``PermissionError``,
-        ``UnicodeDecodeError``) propagate unchanged.  In every failure case
-        no :class:`Engagement` is created.
+        does not exist, is not valid UTF-8 or YAML, or fails policy
+        validation (see :func:`roe_guard.policy.load_policy`).  Other OS
+        errors (e.g. ``IsADirectoryError``, ``PermissionError``) propagate
+        unchanged.  In every failure case no :class:`Engagement` is created.
         """
         from roe_guard.policy import _load_policy
 
@@ -224,6 +312,9 @@ class Decision:
     target: str
     action_type: str
     timestamp: datetime
+    mode: EnforcementMode = EnforcementMode.ENFORCE
+    reason_code: str = ""
+    matched_rule: str = ""
 
     @property
     def allowed(self) -> bool:
@@ -303,13 +394,21 @@ class AuditVerificationResult:
 
 
 __all__ = [
+    "ApprovalSpec",
     "AuditEntry",
     "AuditVerificationResult",
     "BlackoutWindow",
+    "CredentialSpec",
     "Decision",
     "DecisionType",
+    "EnforcementMode",
     "Engagement",
+    "FilesystemSpec",
     "Policy",
+    "ReasonCode",
+    "ResourceSpec",
+    "SandboxSpec",
     "Scope",
     "ScopeEntry",
+    "SyscallSpec",
 ]
