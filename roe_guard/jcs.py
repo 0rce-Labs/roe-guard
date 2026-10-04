@@ -2,9 +2,9 @@
 
 Only the value set the audit records need is supported: strings, integers
 with |n| ≤ 2^53−1, booleans, null, string-keyed objects and arrays.
-Floats and other types raise ``TypeError``; out-of-range integers, non-
-string keys and lone surrogates raise ``ValueError``. Only the stdlib is
-used.
+Floats, other types and non-string keys raise ``TypeError``; out-of-range
+integers, lone surrogates and nesting deeper than 64 objects/arrays raise
+``ValueError``. Only the stdlib is used.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ import json
 from typing import Any
 
 _MAX_SAFE_INTEGER = 2**53 - 1
+# A fixed bound keeps the result independent of the caller's stack depth.
+MAX_DEPTH = 64
 
 
 def _sort_key(key: str) -> bytes:
@@ -28,10 +30,11 @@ def _dump_string(value: str) -> str:
 
 def canonicalize(value: object) -> bytes:
     """Return the RFC 8785 canonical UTF-8 serialization of *value*."""
-    return _canonical(value).encode("utf-8")
+    # A lone surrogate fails here: UnicodeEncodeError is a ValueError.
+    return _canonical(value, 0).encode("utf-8")
 
 
-def _canonical(value: Any) -> str:
+def _canonical(value: Any, depth: int) -> str:
     if value is True:
         return "true"
     if value is False:
@@ -43,9 +46,15 @@ def _canonical(value: Any) -> str:
     if isinstance(value, int):
         if abs(value) > _MAX_SAFE_INTEGER:
             raise ValueError(f"integer out of the safe range: {value}")
-        return str(value)
+        # int.__repr__ keeps int subclasses (IntEnum) numeric on every
+        # Python version; str() would not.
+        return int.__repr__(value)
+    if isinstance(value, (list, dict)):
+        depth += 1
+        if depth > MAX_DEPTH:
+            raise ValueError(f"nesting deeper than {MAX_DEPTH} objects/arrays")
     if isinstance(value, list):
-        return "[" + ",".join(_canonical(item) for item in value) + "]"
+        return "[" + ",".join([_canonical(item, depth) for item in value]) + "]"
     if isinstance(value, dict):
         for key in value:
             if not isinstance(key, str):
@@ -54,9 +63,7 @@ def _canonical(value: Any) -> str:
                 )
         items = []
         for key in sorted(value, key=_sort_key):
-            # Reading value[key] raises ValueError for lone surrogates via
-            # the recursive string path; keys are validated above.
-            items.append(_dump_string(key) + ":" + _canonical(value[key]))
+            items.append(_dump_string(key) + ":" + _canonical(value[key], depth))
         return "{" + ",".join(items) + "}"
     raise TypeError(f"unsupported type for JCS: {type(value).__name__}")
 

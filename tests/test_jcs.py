@@ -84,3 +84,20 @@ def test_non_string_key_rejected():
 def test_lone_surrogate_rejected():
     with pytest.raises(ValueError):
         canonicalize({"x": "\ud800"})
+
+
+def test_nesting_depth_is_bounded():
+    from roe_guard.jcs import MAX_DEPTH
+
+    deep: object = 0
+    for _ in range(MAX_DEPTH):
+        deep = [deep]
+    assert canonicalize(deep) == b"[" * MAX_DEPTH + b"0" + b"]" * MAX_DEPTH
+    with pytest.raises(ValueError):
+        canonicalize([deep])
+    with pytest.raises(ValueError):
+        canonicalize({"k": [deep]})
+    loop: list = []
+    loop.append(loop)
+    with pytest.raises(ValueError):
+        canonicalize(loop)

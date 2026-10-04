@@ -306,6 +306,448 @@
         "broken_at_index": 0,
         "reason_code": "INVALID_JSON"
       }
+    },
+    {
+      "id": "v2-timestamp-trailing-newline",
+      "description": "A timestamp ending in \\n is TIMESTAMP_FORMAT (fullmatch, not search).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"63b081b5a2a5baab9b8fb93be378e630dd89f1e57d121947bc92222908d9a2c4\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\\n\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 0,
+        "reason_code": "TIMESTAMP_FORMAT"
+      }
+    },
+    {
+      "id": "v2-timestamp-non-ascii-digits",
+      "description": "Arabic-Indic digits in the timestamp are TIMESTAMP_FORMAT (ASCII only).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"c6e85db5f09ca8fc2bed0794d7263d88c95da2d45297abc6209aaacd25f96324\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"٢٠٢٦-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 0,
+        "reason_code": "TIMESTAMP_FORMAT"
+      }
+    },
+    {
+      "id": "v2-policy-sha-trailing-newline",
+      "description": "A policy_sha256 ending in \\n is MALFORMED.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"d273a1ba49c37099d8a2efa7e171531d7fc4ff78092d0e51c037ba5bbd70e1fa\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\\n\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 0,
+        "reason_code": "MALFORMED"
+      }
+    },
+    {
+      "id": "v2-mode-invalid",
+      "description": "A mode outside enforce/observe is MALFORMED (step 5).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"2de8036f0fcc8b1e2afaa5d8470d01f559492050d20aad704361c3d3b29d494c\",\"metadata\":{\"i\":1},\"mode\":\"audit\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "MALFORMED"
+      }
+    },
+    {
+      "id": "v2-missing-and-extra-key",
+      "description": "A missing key wins over an extra key (step 2 before step 4).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"76e83dc3004f889d7d37fc72bb823c591f5c71a6b7d5a8bdde0c8f3d835aab7b\",\"extra\":1,\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "MALFORMED"
+      }
+    },
+    {
+      "id": "v2-unknown-version-with-extra-key",
+      "description": "v: 3 wins over an extra key (step 3 before step 4).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"ec3b676ca283e198bdc50322854fff0bcac4e8faa67fb2229253ff70939cfd94\",\"extra\":1,\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":3}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "UNKNOWN_VERSION"
+      }
+    },
+    {
+      "id": "v2-chain-id-before-seq",
+      "description": "A foreign chain_id wins over a wrong seq (step 7 before step 8).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"other-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"884e881260a93f6d9d9839c087461189edc6e4c235874b3121355272d405bc8b\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":7,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "CHAIN_ID_MISMATCH"
+      }
+    },
+    {
+      "id": "v2-version-float",
+      "description": "v: 2.0 is not the integer 2 (UNKNOWN_VERSION).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2.0}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 0,
+        "reason_code": "UNKNOWN_VERSION"
+      }
+    },
+    {
+      "id": "v2-metadata-float",
+      "description": "A float in metadata is outside the JCS subset (MALFORMED).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1.5},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "MALFORMED"
+      }
+    },
+    {
+      "id": "v2-metadata-nan",
+      "description": "NaN is not JSON (INVALID_JSON).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":NaN},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "INVALID_JSON"
+      }
+    },
+    {
+      "id": "v2-blank-line",
+      "description": "An empty line after a v2 line is INVALID_JSON.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "INVALID_JSON"
+      }
+    },
+    {
+      "id": "mixed-v1-blank-line-valid",
+      "description": "v1 rules skip empty lines before the first v2 line; seq counts records.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-v1\",\"entry_hash\":\"68821d8fb7f9e316fc6a6114003a9d0d555bbd81d1718dc683ea5f78e9edf2d2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"target\":\"10.20.3.5\",\"timestamp\":\"2026-08-10T12:00:00\"}",
+        "",
+        "{\"action_type\":\"recon\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-v1\",\"entry_hash\":\"8450b712e29f435d34a5909048c6f4ffbdb93ad5c1667ac6490194d429c2808e\",\"prev_hash\":\"68821d8fb7f9e316fc6a6114003a9d0d555bbd81d1718dc683ea5f78e9edf2d2\",\"reason\":\"action type 'recon' allowed\",\"target\":\"10.20.3.6\",\"timestamp\":\"2026-08-10T12:00:00\"}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"49cbab2bf3849fc9779d76df6f6267db85d4d6f201662c99cec87e2bf63d873b\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"8450b712e29f435d34a5909048c6f4ffbdb93ad5c1667ac6490194d429c2808e\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"be6059491f217a9322c6f92f8929782e7ec36b59c89ae3e273e1de0b1546610e\",\"metadata\":{\"i\":3},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"49cbab2bf3849fc9779d76df6f6267db85d4d6f201662c99cec87e2bf63d873b\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":3,\"target\":\"10.20.3.8\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": true,
+        "broken_at_index": null,
+        "reason_code": null
+      }
+    },
+    {
+      "id": "v2-valid-raw-separators",
+      "description": "U+2028, U+2029 and U+0085 stay raw in JCS; only \\n ends a line.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"d8682061d9262838b1d458ef7b100d12ef4a70cd031db0da1dce9d7ca5d6a905\",\"metadata\":{\"note\":\" \"},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"line sep\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"e2e1b7d2470aacff80cdb6447aab63c1703efa2ef0eef271460ea2592d8dbbaf\",\"metadata\":{\"note\":\" \"},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"d8682061d9262838b1d458ef7b100d12ef4a70cd031db0da1dce9d7ca5d6a905\",\"reason\":\"nextline\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": true,
+        "broken_at_index": null,
+        "reason_code": null
+      }
+    },
+    {
+      "id": "v2-valid-records-after-checkpoint",
+      "description": "A record after the last checkpoint verifies (known limit, SPEC §14.7).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":1,\"sig\":\"EZOFkY_Pndq9YWcXAZYx03yu_KREEC8vDSUm1vfLeOPP6UIBLXhbXaTjwlqbI3XzLGfe1gesfDcnEtV20ZKlBA\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": true,
+        "broken_at_index": null,
+        "reason_code": null
+      }
+    },
+    {
+      "id": "v2-checkpoint-head-mismatch-intermediate",
+      "description": "Every checkpoint head is checked, not only the last one.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":0,\"sig\":\"AbfYZJohOdsnh4VzTOhoKbAR2teTREHtcWTJZeHwSLUscEd_hNq0zNocECfT3tJ4msPlHaAAfvKus12puUD6AA\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":2,\"sig\":\"l5HGqLDPmh00rbVGAy2qDt_63DKR4Gt8pK1eI74FYHGazjSKfP6bsg1vsmBI5-i-1YfDYZczn3tvguEO8kidBg\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": 0,
+        "reason_code": "CHECKPOINT_HEAD_MISMATCH"
+      }
+    },
+    {
+      "id": "v2-checkpoint-malformed-version",
+      "description": "A checkpoint with v: 3 is CHECKPOINT_MALFORMED (re-signed).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":2,\"sig\":\"jkhGwmneFgw7pQqjDQDpvostzE-CbQrRsFK02xVNBkSXELGOoYdv22uqOd5lAj5wDXnk3oDmiQ-knaK21GYuCg\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":3}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": 2,
+        "reason_code": "CHECKPOINT_MALFORMED"
+      }
+    },
+    {
+      "id": "v2-checkpoint-seq-decreases",
+      "description": "Checkpoint seq never decreases (CHECKPOINT_MALFORMED).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":2,\"sig\":\"l5HGqLDPmh00rbVGAy2qDt_63DKR4Gt8pK1eI74FYHGazjSKfP6bsg1vsmBI5-i-1YfDYZczn3tvguEO8kidBg\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":1,\"sig\":\"EZOFkY_Pndq9YWcXAZYx03yu_KREEC8vDSUm1vfLeOPP6UIBLXhbXaTjwlqbI3XzLGfe1gesfDcnEtV20ZKlBA\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "CHECKPOINT_MALFORMED"
+      }
+    },
+    {
+      "id": "v2-checkpoint-sig-noncanonical",
+      "description": "A sig whose padding bits are not zero is CHECKPOINT_MALFORMED.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":2,\"sig\":\"l5HGqLDPmh00rbVGAy2qDt_63DKR4Gt8pK1eI74FYHGazjSKfP6bsg1vsmBI5-i-1YfDYZczn3tvguEO8kidBh\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": 2,
+        "reason_code": "CHECKPOINT_MALFORMED"
+      }
+    },
+    {
+      "id": "v2-checkpoint-chain-id-mismatch",
+      "description": "A checkpoint for another chain is CHAIN_ID_MISMATCH (re-signed).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"other-chain\",\"head_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":2,\"sig\":\"8wBkEAjWspPXKaG1IetKuSHyPD4l_NPxR2CqVGWEGsuqzp64oZlMhKxwu1oS66g0YorqI9M4vD9yfASR3K-bAA\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": 2,
+        "reason_code": "CHAIN_ID_MISMATCH"
+      }
+    },
+    {
+      "id": "v2-line-not-canonical",
+      "description": "Same content in another key order is not JCS(record) (MALFORMED).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":1},\"reason_code\":\"ACTION_ALLOWED\",\"reason\":\"action type 'recon' allowed\",\"decision\":\"ALLOW\",\"action_type\":\"recon\",\"target\":\"10.20.3.6\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"engagement_id\":\"conf-eng\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"chain_id\":\"conformance-chain\",\"seq\":1,\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "MALFORMED"
+      }
+    },
+    {
+      "id": "v2-line-crlf",
+      "description": "A trailing \\r makes the line differ from JCS(record) (MALFORMED).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}\r",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": null,
+      "public_keys": null,
+      "expected": {
+        "valid": false,
+        "broken_at_index": 1,
+        "reason_code": "MALFORMED"
+      }
+    },
+    {
+      "id": "v2-chain-truncated-far",
+      "description": "CHAIN_TRUNCATED carries the record count, not the checkpoint seq.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":5,\"sig\":\"Ija8Ghf3K0409rrE0wp6gCWfRUo21O97gjPo2bnNSXq3Yq8rs5ciWbRg366kcUn0msl06vMxagBlZwDhQLJKCw\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": 3,
+        "reason_code": "CHAIN_TRUNCATED"
+      }
+    },
+    {
+      "id": "v2-checkpoint-signature-invalid-mid",
+      "description": "Checkpoint failures carry the checkpoint seq, not a line index.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":0,\"sig\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": 0,
+        "reason_code": "CHECKPOINT_SIGNATURE_INVALID"
+      }
+    },
+    {
+      "id": "v2-checkpoint-line-not-canonical",
+      "description": "A checkpoint line that is not JCS(checkpoint) is CHECKPOINT_MALFORMED.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\": \"conformance-chain\", \"head_hash\": \"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\", \"key_id\": \"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\", \"seq\": 2, \"sig\": \"l5HGqLDPmh00rbVGAy2qDt_63DKR4Gt8pK1eI74FYHGazjSKfP6bsg1vsmBI5-i-1YfDYZczn3tvguEO8kidBg\", \"timestamp\": \"2026-10-01T10:00:00.000000Z\", \"v\": 2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": 2,
+        "reason_code": "CHECKPOINT_MALFORMED"
+      }
+    },
+    {
+      "id": "v2-checkpoint-file-empty",
+      "description": "A given checkpoint file without lines protects nothing (CHECKPOINT_MISSING).",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": null,
+        "reason_code": "CHECKPOINT_MISSING"
+      }
     }
   ]
 }

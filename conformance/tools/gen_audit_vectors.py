@@ -452,6 +452,258 @@ def build_cases() -> dict:
         }
     )
 
+    # --- review round additions (expectations hand-written) ------------
+
+    def lines(records):
+        return [canonicalize(r).decode() for r in records]
+
+    def add(case_id, description, chain, expected, checkpoints=None, keys=None):
+        valid_case = expected is None
+        cases.append(
+            {
+                "id": case_id,
+                "description": description,
+                "chain": chain,
+                "checkpoints": checkpoints,
+                "public_keys": keys,
+                "expected": {
+                    "valid": valid_case,
+                    "broken_at_index": None if valid_case else expected[1],
+                    "reason_code": None if valid_case else expected[0],
+                },
+            }
+        )
+
+    def rehashed(index, mutate, base=None):
+        records = copy.deepcopy(base or valid)
+        record = records[index]
+        mutate(record)
+        record["entry_hash"] = hashlib.sha256(
+            canonicalize({k: v for k, v in record.items() if k != "entry_hash"})
+        ).hexdigest()
+        return records
+
+    add(
+        "v2-timestamp-trailing-newline",
+        "A timestamp ending in \\n is TIMESTAMP_FORMAT (fullmatch, not search).",
+        lines(rehashed(0, lambda r: r.update(timestamp=TIMESTAMPS[0] + "\n"))),
+        ("TIMESTAMP_FORMAT", 0),
+    )
+    add(
+        "v2-timestamp-non-ascii-digits",
+        "Arabic-Indic digits in the timestamp are TIMESTAMP_FORMAT (ASCII only).",
+        lines(
+            rehashed(
+                0,
+                lambda r: r.update(
+                    timestamp="\u0662\u0660\u0662\u0666" + TIMESTAMPS[0][4:]
+                ),
+            )
+        ),
+        ("TIMESTAMP_FORMAT", 0),
+    )
+    add(
+        "v2-policy-sha-trailing-newline",
+        "A policy_sha256 ending in \\n is MALFORMED.",
+        lines(rehashed(0, lambda r: r.update(policy_sha256=POLICY_SHA + "\n"))),
+        ("MALFORMED", 0),
+    )
+    add(
+        "v2-mode-invalid",
+        "A mode outside enforce/observe is MALFORMED (step 5).",
+        lines(rehashed(1, lambda r: r.update(mode="audit"))),
+        ("MALFORMED", 1),
+    )
+    add(
+        "v2-missing-and-extra-key",
+        "A missing key wins over an extra key (step 2 before step 4).",
+        lines(rehashed(1, lambda r: (r.pop("agent_id"), r.update(extra=1)))),
+        ("MALFORMED", 1),
+    )
+    add(
+        "v2-unknown-version-with-extra-key",
+        "v: 3 wins over an extra key (step 3 before step 4).",
+        lines(rehashed(1, lambda r: r.update(v=3, extra=1))),
+        ("UNKNOWN_VERSION", 1),
+    )
+    add(
+        "v2-chain-id-before-seq",
+        "A foreign chain_id wins over a wrong seq (step 7 before step 8).",
+        lines(rehashed(1, lambda r: r.update(chain_id="other-chain", seq=7))),
+        ("CHAIN_ID_MISMATCH", 1),
+    )
+    float_v = lines(valid)
+    float_v[0] = float_v[0].replace('"v":2}', '"v":2.0}')
+    add(
+        "v2-version-float",
+        "v: 2.0 is not the integer 2 (UNKNOWN_VERSION).",
+        float_v,
+        ("UNKNOWN_VERSION", 0),
+    )
+    float_meta = lines(valid)
+    float_meta[1] = float_meta[1].replace('"metadata":{"i":1}', '"metadata":{"i":1.5}')
+    add(
+        "v2-metadata-float",
+        "A float in metadata is outside the JCS subset (MALFORMED).",
+        float_meta,
+        ("MALFORMED", 1),
+    )
+    nan_meta = lines(valid)
+    nan_meta[1] = nan_meta[1].replace('"metadata":{"i":1}', '"metadata":{"i":NaN}')
+    add(
+        "v2-metadata-nan",
+        "NaN is not JSON (INVALID_JSON).",
+        nan_meta,
+        ("INVALID_JSON", 1),
+    )
+    blank = lines(valid)
+    add(
+        "v2-blank-line",
+        "An empty line after a v2 line is INVALID_JSON.",
+        [blank[0], "", *blank[1:]],
+        ("INVALID_JSON", 1),
+    )
+    mixed_lines = lines([v1a, v1b] + mixed_v2)
+    add(
+        "mixed-v1-blank-line-valid",
+        "v1 rules skip empty lines before the first v2 line; seq counts records.",
+        [mixed_lines[0], "", *mixed_lines[1:]],
+        None,
+    )
+    separators = []
+    prev = "0" * 64
+    for seq, text in enumerate(["line\u2028sep", "next\u0085line"]):
+        separators.append(
+            _make_record(seq, prev, reason=text, metadata={"note": "\u2029"})
+        )
+        prev = separators[-1]["entry_hash"]
+    add(
+        "v2-valid-raw-separators",
+        "U+2028, U+2029 and U+0085 stay raw in JCS; only \\n ends a line.",
+        lines(separators),
+        None,
+    )
+
+    after = _make_checkpoint(1, valid[1]["entry_hash"])
+    add(
+        "v2-valid-records-after-checkpoint",
+        "A record after the last checkpoint verifies (known limit, SPEC §14.7).",
+        lines(valid),
+        None,
+        [canonicalize(after).decode()],
+        public_keys,
+    )
+    add(
+        "v2-checkpoint-head-mismatch-intermediate",
+        "Every checkpoint head is checked, not only the last one.",
+        lines(valid),
+        ("CHECKPOINT_HEAD_MISMATCH", 0),
+        [
+            canonicalize(_make_checkpoint(0, "b" * 64)).decode(),
+            canonicalize(checkpoint).decode(),
+        ],
+        public_keys,
+    )
+    add(
+        "v2-checkpoint-malformed-version",
+        "A checkpoint with v: 3 is CHECKPOINT_MALFORMED (re-signed).",
+        lines(valid),
+        ("CHECKPOINT_MALFORMED", 2),
+        [canonicalize(_make_checkpoint(2, valid[-1]["entry_hash"], v=3)).decode()],
+        public_keys,
+    )
+    add(
+        "v2-checkpoint-seq-decreases",
+        "Checkpoint seq never decreases (CHECKPOINT_MALFORMED).",
+        lines(valid),
+        ("CHECKPOINT_MALFORMED", 1),
+        [
+            canonicalize(checkpoint).decode(),
+            canonicalize(_make_checkpoint(1, valid[1]["entry_hash"])).decode(),
+        ],
+        public_keys,
+    )
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    respelled = dict(checkpoint)
+    respelled["sig"] = (
+        respelled["sig"][:-1] + alphabet[alphabet.index(respelled["sig"][-1]) ^ 1]
+    )
+    add(
+        "v2-checkpoint-sig-noncanonical",
+        "A sig whose padding bits are not zero is CHECKPOINT_MALFORMED.",
+        lines(valid),
+        ("CHECKPOINT_MALFORMED", 2),
+        [canonicalize(respelled).decode()],
+        public_keys,
+    )
+    add(
+        "v2-checkpoint-chain-id-mismatch",
+        "A checkpoint for another chain is CHAIN_ID_MISMATCH (re-signed).",
+        lines(valid),
+        ("CHAIN_ID_MISMATCH", 2),
+        [
+            canonicalize(
+                _make_checkpoint(2, valid[-1]["entry_hash"], chain_id="other-chain")
+            ).decode()
+        ],
+        public_keys,
+    )
+
+    reordered = lines(valid)
+    reordered[1] = json.dumps(
+        dict(reversed(list(valid[1].items()))), separators=(",", ":")
+    )
+    add(
+        "v2-line-not-canonical",
+        "Same content in another key order is not JCS(record) (MALFORMED).",
+        reordered,
+        ("MALFORMED", 1),
+    )
+    crlf = lines(valid)
+    add(
+        "v2-line-crlf",
+        "A trailing \\r makes the line differ from JCS(record) (MALFORMED).",
+        [crlf[0], crlf[1] + "\r", crlf[2]],
+        ("MALFORMED", 1),
+    )
+    add(
+        "v2-chain-truncated-far",
+        "CHAIN_TRUNCATED carries the record count, not the checkpoint seq.",
+        lines(valid),
+        ("CHAIN_TRUNCATED", 3),
+        [canonicalize(_make_checkpoint(5, "e" * 64)).decode()],
+        public_keys,
+    )
+    add(
+        "v2-checkpoint-signature-invalid-mid",
+        "Checkpoint failures carry the checkpoint seq, not a line index.",
+        lines(valid),
+        ("CHECKPOINT_SIGNATURE_INVALID", 0),
+        [
+            canonicalize(
+                _make_checkpoint(0, valid[0]["entry_hash"], sig="A" * 86)
+            ).decode()
+        ],
+        public_keys,
+    )
+    add(
+        "v2-checkpoint-line-not-canonical",
+        "A checkpoint line that is not JCS(checkpoint) is CHECKPOINT_MALFORMED.",
+        lines(valid),
+        ("CHECKPOINT_MALFORMED", 2),
+        [json.dumps(checkpoint, sort_keys=True)],
+        public_keys,
+    )
+
+    add(
+        "v2-checkpoint-file-empty",
+        "A given checkpoint file without lines protects nothing (CHECKPOINT_MISSING).",
+        lines(valid),
+        ("CHECKPOINT_MISSING", None),
+        [],
+        public_keys,
+    )
+
     return {
         "format": 1,
         "suite": "audit-v2",
@@ -460,73 +712,113 @@ def build_cases() -> dict:
 
 
 def build_jcs_cases() -> dict:
-    rfc_object = {
-        "€": "Euro Sign",
-        "\r": "Carriage Return",
-        "דּ": "Hebrew Letter Dalet With Dagesh",
-        "1": "One",
-        "\U0001f600": "Emoji: Grinning Face",
-        "\u0080": "Control",
-        "ö": "Latin Small Letter O With Diaeresis",
-    }
+    # Expected outputs are written by hand as canonical text; the generator
+    # never runs canonicalize() on them.
+    rfc_input = (
+        '{"\u20ac": "Euro Sign", "\\r": "Carriage Return", '
+        '"\ufb33": "Hebrew Letter Dalet With Dagesh", "1": "One", '
+        '"\U0001f600": "Emoji: Grinning Face", "\u0080": "Control", '
+        '"\u00f6": "Latin Small Letter O With Diaeresis"}'
+    )
+    rfc_output = (
+        '{"\\r":"Carriage Return","1":"One","\u0080":"Control",'
+        '"\u00f6":"Latin Small Letter O With Diaeresis","\u20ac":"Euro Sign",'
+        '"\U0001f600":"Emoji: Grinning Face",'
+        '"\ufb33":"Hebrew Letter Dalet With Dagesh"}'
+    )
 
-    def canon_hex(value) -> str:
-        return canonicalize(value).hex()
+    def ok(case_id, description, input_json, canonical):
+        return {
+            "id": case_id,
+            "description": description,
+            "input_json": input_json,
+            "expected_hex": canonical.encode("utf-8").hex(),
+        }
+
+    def err(case_id, description, input_json, code):
+        return {
+            "id": case_id,
+            "description": description,
+            "input_json": input_json,
+            "expected_error": code,
+        }
 
     return {
         "format": 1,
         "suite": "jcs",
         "cases": [
-            {
-                "id": "jcs-rfc-ordering",
-                "description": "RFC 8785 §3.2.3 UTF-16 key ordering example.",
-                "input_json": json.dumps(rfc_object, ensure_ascii=False),
-                "expected_hex": canon_hex(rfc_object),
-            },
-            {
-                "id": "jcs-control-escape",
-                "description": "Control characters use lowercase \\u00xx escapes.",
-                "input_json": json.dumps({"k": '"\\'}, ensure_ascii=False),
-                "expected_hex": canon_hex({"k": '"\\'}),
-            },
-            {
-                "id": "jcs-quote-backslash",
-                "description": "Quote and backslash escaping.",
-                "input_json": json.dumps({"k": '"\\'}, ensure_ascii=False),
-                "expected_hex": canon_hex({"k": '"\\'}),
-            },
-            {
-                "id": "jcs-literals",
-                "description": "true/false/null serialization.",
-                "input_json": '{"a":true,"b":false,"c":null}',
-                "expected_hex": canon_hex({"a": True, "b": False, "c": None}),
-            },
-            {
-                "id": "jcs-array-order",
-                "description": "Array order is preserved.",
-                "input_json": '{"a":[3,1,2]}',
-                "expected_hex": canon_hex({"a": [3, 1, 2]}),
-            },
-            {
-                "id": "jcs-nested",
-                "description": "Nested objects are ordered at every level.",
-                "input_json": json.dumps(
-                    {"b": {"z": 1, "a": 2}, "a": 3}, ensure_ascii=False
-                ),
-                "expected_hex": canon_hex({"b": {"a": 2, "z": 1}, "a": 3}),
-            },
-            {
-                "id": "jcs-error-float",
-                "description": "Floats are unsupported.",
-                "input_json": '{"x":1.5}',
-                "expected_error": "UNSUPPORTED_NUMBER",
-            },
-            {
-                "id": "jcs-error-surrogate",
-                "description": "Lone surrogates are invalid.",
-                "input_json": '{"x":"\\ud800"}',
-                "expected_error": "LONE_SURROGATE",
-            },
+            ok(
+                "jcs-rfc-ordering",
+                "RFC 8785 §3.2.3 UTF-16 key ordering example.",
+                rfc_input,
+                rfc_output,
+            ),
+            ok(
+                "jcs-control-escape",
+                "Control characters use short escapes or lowercase \\u00xx.",
+                '{"k": "\\u0001\\u001f\\b\\t\\n\\f\\r"}',
+                '{"k":"\\u0001\\u001f\\b\\t\\n\\f\\r"}',
+            ),
+            ok(
+                "jcs-quote-backslash",
+                "Quote and backslash escaping.",
+                '{"k": "\\"\\\\"}',
+                '{"k":"\\"\\\\"}',
+            ),
+            ok(
+                "jcs-raw-non-ascii",
+                "U+007F, U+2028 and U+2029 stay raw UTF-8; \\u escapes are decoded.",
+                '{"k": "\\u007f\\u2028\\u2029\\u00e9"}',
+                '{"k":"\u007f\u2028\u2029\u00e9"}',
+            ),
+            ok(
+                "jcs-literals",
+                "true/false/null serialization.",
+                '{"c": null, "b": false, "a": true}',
+                '{"a":true,"b":false,"c":null}',
+            ),
+            ok(
+                "jcs-array-order",
+                "Array order is preserved.",
+                '{"a": [3, 1, 2]}',
+                '{"a":[3,1,2]}',
+            ),
+            ok(
+                "jcs-nested",
+                "Nested objects are ordered at every level.",
+                '{"b": {"z": 1, "a": 2}, "a": 3}',
+                '{"a":3,"b":{"a":2,"z":1}}',
+            ),
+            ok(
+                "jcs-integer-bounds",
+                "Integers up to 2^53-1 in magnitude are written as digits.",
+                '{"max": 9007199254740991, "min": -9007199254740991, "zero": 0}',
+                '{"max":9007199254740991,"min":-9007199254740991,"zero":0}',
+            ),
+            err(
+                "jcs-error-float",
+                "Floats are unsupported.",
+                '{"x":1.5}',
+                "UNSUPPORTED_NUMBER",
+            ),
+            err(
+                "jcs-error-integer-range",
+                "2^53 is outside the integer range.",
+                '{"x":9007199254740992}',
+                "INTEGER_OUT_OF_RANGE",
+            ),
+            err(
+                "jcs-error-depth",
+                "More than 64 nested arrays/objects is an error.",
+                "[" * 65 + "0" + "]" * 65,
+                "NESTING_TOO_DEEP",
+            ),
+            err(
+                "jcs-error-surrogate",
+                "Lone surrogates are invalid.",
+                '{"x":"\\ud800"}',
+                "LONE_SURROGATE",
+            ),
         ],
     }
 

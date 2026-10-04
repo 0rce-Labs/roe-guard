@@ -19,18 +19,17 @@ Implemented in T5.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
-from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
-from roe_guard.exceptions import AuditIntegrityError
+from roe_guard.exceptions import AuditIntegrityError, AuditWriterLockedError
 from roe_guard.models import (
     AuditEntry,
     AuditVerificationResult,
     Decision,
-    DecisionType,
 )
 
 GENESIS_PREV_HASH = "0" * 64
@@ -87,6 +86,20 @@ def _decision_to_entry(
     )
 
 
+def _lock_for_append(fh: TextIO) -> None:
+    """Hold the writer lock for one append; a live ``AuditLogV2`` wins."""
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - non-POSIX: no lock, as before
+        return
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        if exc.errno in (errno.EACCES, errno.EAGAIN):
+            raise AuditWriterLockedError(f"another writer holds {fh.name}") from exc
+        raise
+
+
 class AuditLog:
     """Append-only JSONL audit log with SHA-256 hash chaining.
 
@@ -123,23 +136,26 @@ class AuditLog:
         return prev
 
     def _reject_v2_tail(self) -> None:
-        """Refuse to append v1 records to a chain that contains v2 records."""
-        from roe_guard.audit_v2 import verify_chain
+        """Refuse to append v1 records to a chain that contains v2 records.
 
-        result = verify_chain(self.path)
-        if result.valid and result.total_entries:
-            with self.path.open("r", encoding="utf-8") as fh:
-                lines = [line for line in fh if line.strip()]
-            if lines and json.loads(lines[-1]).get("v") == 2:
-                raise AuditIntegrityError("chain contains v2 records; use AuditLogV2")
+        SPEC §14.7: a v1 line after a v2 line is a version downgrade, so
+        the v1 writer never produces one.
+        """
+        with self.path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                payload = json.loads(line)
+                if isinstance(payload, dict) and "v" in payload:
+                    raise AuditIntegrityError(
+                        "chain contains v2 records; use AuditLogV2"
+                    )
 
     def record(
         self,
         decision: Decision,
         engagement_id: str = "",
     ) -> AuditEntry:
-        self._reject_v2_tail()
-
         """Append a :class:`Decision` to the audit chain.
 
         Computes ``entry_hash`` from the previous line's hash plus the
@@ -153,7 +169,17 @@ class AuditLog:
 
         Returns:
             The :class:`~roe_guard.models.AuditEntry` that was written.
+
+        Raises:
+            AuditIntegrityError: The chain already contains v2 records.
+            AuditWriterLockedError: An ``AuditLogV2`` writer holds the file.
         """
+        with self.path.open("a", encoding="utf-8") as fh:
+            _lock_for_append(fh)
+            self._reject_v2_tail()
+            return self._append(fh, decision, engagement_id)
+
+    def _append(self, fh: TextIO, decision: Decision, engagement_id: str) -> AuditEntry:
         prev_hash = self._last_entry_hash()
         # First compute the hash with an empty entry_hash slot, then
         # build the entry with that hash filled in.  The shell MUST
@@ -166,16 +192,15 @@ class AuditLog:
         # (It will, because _canonical_payload is deterministic and both
         # objects have identical field values except entry_hash which is
         # hashed as "" anyway.)
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(
-                json.dumps(
-                    _canonical_payload(entry),
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    ensure_ascii=False,
-                )
-                + "\n"
+        fh.write(
+            json.dumps(
+                _canonical_payload(entry),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
             )
+            + "\n"
+        )
         return entry
 
     # ------------------------------------------------------------------ #
@@ -187,7 +212,9 @@ class AuditLog:
 
         Reads every line, recomputes each entry's hash from its
         self-describing payload, and confirms that ``prev_hash`` links
-        are consistent with the prior line's ``entry_hash``.
+        are consistent with the prior line's ``entry_hash``. Mixed
+        v1→v2 chains are verified by :func:`roe_guard.audit_v2.verify_chain`
+        (checkpoints are not checked here).
 
         Returns:
             :class:`~roe_guard.models.AuditVerificationResult` with:
@@ -197,86 +224,10 @@ class AuditLog:
                 - ``reason``           — explanation, or ``None``.
         """
         # The single verifier lives in audit_v2 and handles mixed v1→v2
-        # chains (card: AuditLog.verify() is a thin wrapper).
+        # chains; v1 lines keep the rules and texts of this method.
         from roe_guard.audit_v2 import verify_chain
 
         return verify_chain(self.path)
-
-        expected_prev = GENESIS_PREV_HASH
-        total = 0
-
-        with self.path.open("r", encoding="utf-8") as fh:
-            for index, raw_line in enumerate(fh):
-                stripped = raw_line.strip()
-                if not stripped:
-                    continue
-                try:
-                    payload = json.loads(stripped)
-                except json.JSONDecodeError as exc:
-                    return AuditVerificationResult(
-                        valid=False,
-                        total_entries=total,
-                        broken_at_index=index,
-                        reason=f"line {index}: invalid JSON: {exc}",
-                    )
-
-                # Reconstruct AuditEntry from the line. Strip the hashes
-                # so we can recompute one of them deterministically.
-                try:
-                    entry = AuditEntry(
-                        engagement_id=payload.get("engagement_id", ""),
-                        timestamp=datetime.fromisoformat(payload["timestamp"]),
-                        target=payload["target"],
-                        action_type=payload["action_type"],
-                        decision=DecisionType(payload["decision"]),
-                        reason=payload.get("reason", ""),
-                        prev_hash=payload["prev_hash"],
-                        entry_hash=payload["entry_hash"],
-                    )
-                except (KeyError, ValueError) as exc:
-                    return AuditVerificationResult(
-                        valid=False,
-                        total_entries=total,
-                        broken_at_index=index,
-                        reason=f"line {index}: malformed entry: {exc}",
-                    )
-
-                # 1) prev_hash must equal previous line's entry_hash.
-                if entry.prev_hash != expected_prev:
-                    return AuditVerificationResult(
-                        valid=False,
-                        total_entries=total + 1,
-                        broken_at_index=index,
-                        reason=(
-                            f"line {index}: prev_hash mismatch "
-                            f"(expected {expected_prev[:12]}…, "
-                            f"got {entry.prev_hash[:12]}…)"
-                        ),
-                    )
-
-                # 2) entry_hash must match what we compute from payload.
-                computed = _hash_entry(entry)
-                if computed != entry.entry_hash:
-                    return AuditVerificationResult(
-                        valid=False,
-                        total_entries=total + 1,
-                        broken_at_index=index,
-                        reason=(
-                            f"line {index}: entry_hash mismatch "
-                            f"(expected {computed[:12]}…, "
-                            f"got {entry.entry_hash[:12]}…)"
-                        ),
-                    )
-
-                expected_prev = entry.entry_hash
-                total += 1
-
-        return AuditVerificationResult(
-            valid=True,
-            total_entries=total,
-            broken_at_index=None,
-            reason=None,
-        )
 
 
 __all__ = ["GENESIS_PREV_HASH", "AuditLog"]
