@@ -186,8 +186,8 @@
     },
     {
       "id": "lad-026-deny-beats-approval",
-      "description": "Step 5 before 6: an action in actions.deny and approval_required_for is denied.",
-      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn", "tool.fs.delete"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn", "tool.fs.delete"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "description": "Step 5 before 6: an action in actions.deny and approval_required_for, but not in actions.allow, is denied.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn", "tool.fs.delete"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
       "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.delete", "now": "2026-10-02T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "ACTION_DENIED", "matched_rule": "actions.deny"}
     }

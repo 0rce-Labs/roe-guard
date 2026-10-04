@@ -47,7 +47,8 @@ non-integer; typed consumers treat a non-integer port as
 A policy that fails to parse yields, for every input,
 `{"verdict": "DENY", "reason_code": "POLICY_INVALID"}`. A policy that
 is not a mapping (for example a JSON array) is also
-`POLICY_INVALID`.
+`POLICY_INVALID`. In suites that carry `matched_rule` (ladder, agent, egress), a
+`POLICY_INVALID` result has `matched_rule` set to the empty string `""`.
 
 Matching semantics are defined in SPEC §14.4 (decision ladder) and
 §14.5 (`enforce_egress`): deny-before-allow and first match wins; the
