@@ -1,7 +1,9 @@
 """Schema/loader agreement over every manifest fixture plus three inline vectors.
 
-The inline vectors cover loader-only checks (SPEC §14.8): no fixture
-is added and the manifest stays at 22 entries.
+``actions: null`` is valid in both the schema and the loader. ``schema_version: 2.0``
+and ``sandbox.resources.pids_max: 256.0`` pass the schema, but the loader rejects
+them because it rejects integral floats (SPEC §14.8). No fixture is added and the
+manifest stays at 22 entries.
 """
 
 import json
@@ -60,7 +62,7 @@ def test_manifest_agreement(name):
             assert _schema_errors(document) == [], name
 
 
-# --- inline vectors (SPEC §14.8; fixture count stays 22) -----------------------
+# --- inline vectors (fixture count stays 22) ------------------------------------
 
 _BASE = {
     "schema_version": 2,

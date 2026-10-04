@@ -59,8 +59,8 @@
       "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow", "reason": "action type 'recon' allowed"}
     },
     {
-      "id": "v1g-009-hostname-case-sensitive",
-      "description": "Hostname matching is case-sensitive on the lower-cased comparison of the target.",
+      "id": "v1g-009-hostname-case-insensitive",
+      "description": "Hostname matching lower-cases target and pattern, so an upper-case target matches.",
       "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
       "input": {"kind": "action", "target": "DB.STAGING.ACME.INTERNAL", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
       "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow", "reason": "action type 'recon' allowed"}

@@ -108,8 +108,8 @@
       "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
     },
     {
-      "id": "egr-023-imds-gcp-ipv6",
-      "description": "E4: GCP metadata IPv6 address.",
+      "id": "egr-023-imds-aws-ipv6",
+      "description": "E4: AWS EC2 metadata IPv6 address.",
       "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
       "input": {"kind": "egress", "host": "fd00:ec2::254", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
@@ -540,6 +540,13 @@
       "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}, "agent": {"id": "spiffe://example.org/a"}},
       "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-20T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISSING", "matched_rule": "agent.id"}
+    },
+    {
+      "id": "egr-085-port-none-second-entry",
+      "description": "E8: no host-matching entry has the port; matched_rule is the first host-matching entry, here the second entry.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "other.example.org", "ports": [443]}, {"host": "api.example.com", "ports": [80]}, {"host": "*.example.com", "ports": [81]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 8080, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_PORT_NOT_ALLOWED", "matched_rule": "egress.http.allow[1]"}
     }
   ]
 }

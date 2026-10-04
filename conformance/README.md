@@ -51,14 +51,22 @@ is not a mapping (for example a JSON array) is also
 `POLICY_INVALID` result has `matched_rule` set to the empty string `""`.
 
 Matching semantics are defined in SPEC §14.4 (decision ladder) and
-§14.5 (`enforce_egress`): deny-before-allow and first match wins; the
-`agent.id` glob is case-sensitive and `*` also covers `/`; scope
-hostnames and egress host globs are matched lower-cased (host patterns
-and targets lose one trailing dot) and never match IP literals; an
-IPv4-mapped IPv6 target is matched against cidr entries as IPv4 (and
-also in its IPv6 form for deny entries); the instance-metadata deny
-runs before any allow rule and no policy can override it. All patterns
-match the whole string with ASCII semantics.
+§14.5 (`enforce_egress`):
+
+- Shared: deny before allow, first match wins. The `agent.id` glob is
+  case-sensitive (`fnmatchcase`) and `*` also covers `/`. All patterns
+  match the whole string with ASCII semantics.
+- Scope (§14.4, unchanged from v1): a `cidr` entry matches only IP
+  literal targets of the same IP version. A `hostname` entry is a glob on
+  the lower-cased target and pattern; it applies to any target string,
+  IP literals included, with no trailing-dot handling and no name
+  resolution.
+- Egress (§14.5): host globs match only name targets; pattern and
+  target are lower-cased and lose one trailing dot. A `cidr` entry inside
+  `::ffff:0:0/96` is read as its IPv4 network. An IPv4-mapped IPv6 target
+  matches `allow` entries only as IPv4 and `deny` entries as both IPv4
+  and IPv6. The instance-metadata deny runs before any allow rule and no
+  policy can override it.
 
 ## Running the Python runner
 
