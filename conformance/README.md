@@ -50,10 +50,14 @@ is not a mapping (for example a JSON array) is also
 `POLICY_INVALID`.
 
 Matching semantics are defined in SPEC §14.4 (decision ladder) and
-§14.5 (`enforce_egress`): deny-before-allow, first match wins,
-case-sensitive globs where `*` also covers `/`, host globs never
-matching IP literals, and the instance-metadata deny that no policy can
-override.
+§14.5 (`enforce_egress`): deny-before-allow and first match wins; the
+`agent.id` glob is case-sensitive and `*` also covers `/`; scope
+hostnames and egress host globs are matched lower-cased (host patterns
+and targets lose one trailing dot) and never match IP literals; an
+IPv4-mapped IPv6 target is matched against cidr entries as IPv4 (and
+also in its IPv6 form for deny entries); the instance-metadata deny
+runs before any allow rule and no policy can override it. All patterns
+match the whole string with ASCII semantics.
 
 ## Running the Python runner
 

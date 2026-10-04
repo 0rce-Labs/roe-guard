@@ -3,75 +3,174 @@
   "$id": "https://raw.githubusercontent.com/0rce-Labs/roe-guard/main/conformance/schema/case-file.schema.json",
   "title": "roe-guard conformance case file",
   "type": "object",
-  "required": ["format", "suite", "cases"],
+  "required": [
+    "format",
+    "suite",
+    "cases"
+  ],
   "additionalProperties": false,
   "properties": {
-    "format": {"const": 1},
-    "suite": {"enum": ["v1-golden", "ladder", "agent", "egress", "load"]},
+    "format": {
+      "const": 1
+    },
+    "suite": {
+      "enum": [
+        "v1-golden",
+        "ladder",
+        "agent",
+        "egress",
+        "load"
+      ]
+    },
     "cases": {
       "type": "array",
       "minItems": 1,
-      "items": {"$ref": "#/$defs/case"}
+      "items": {
+        "$ref": "#/$defs/case"
+      }
     }
   },
   "$defs": {
     "case": {
       "type": "object",
-      "required": ["id", "description", "policy", "input", "expected"],
+      "required": [
+        "id",
+        "description",
+        "policy",
+        "input",
+        "expected"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
-        "description": {"type": "string", "minLength": 1},
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
         "policy": {},
-        "input": {"$ref": "#/$defs/input"},
-        "expected": {"$ref": "#/$defs/expected"}
+        "input": {
+          "$ref": "#/$defs/input"
+        },
+        "expected": {
+          "$ref": "#/$defs/expected"
+        }
       }
     },
     "input": {
       "type": "object",
-      "required": ["kind", "now"],
+      "required": [
+        "kind",
+        "now"
+      ],
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
-            "kind": {"const": "action"},
-            "target": {"type": "string"},
-            "action_type": {"type": "string"},
-            "now": {"$ref": "#/$defs/rfc3339"},
-            "agent": {"$ref": "#/$defs/agent"}
-          }
+            "kind": {
+              "const": "action"
+            },
+            "target": {
+              "type": "string"
+            },
+            "action_type": {
+              "type": "string"
+            },
+            "now": {
+              "$ref": "#/$defs/rfc3339"
+            },
+            "agent": {
+              "$ref": "#/$defs/agent"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "action_type",
+            "now",
+            "agent"
+          ]
         },
         {
           "additionalProperties": false,
           "properties": {
-            "kind": {"const": "egress"},
+            "kind": {
+              "const": "egress"
+            },
             "host": {},
             "port": {},
-            "method": {"type": ["string", "null"]},
-            "now": {"$ref": "#/$defs/rfc3339"},
-            "agent": {"$ref": "#/$defs/agent"}
-          }
+            "method": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "now": {
+              "$ref": "#/$defs/rfc3339"
+            },
+            "agent": {
+              "$ref": "#/$defs/agent"
+            }
+          },
+          "required": [
+            "kind",
+            "host",
+            "port",
+            "method",
+            "now",
+            "agent"
+          ]
         }
       ]
     },
     "agent": {
-      "type": ["object", "null"],
-      "required": ["id"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": {"type": "string"},
-        "runtime": {"type": ["string", "null"]}
+        "id": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "expected": {
       "type": "object",
-      "required": ["verdict", "reason_code"],
+      "required": [
+        "verdict",
+        "reason_code"
+      ],
       "additionalProperties": false,
       "properties": {
-        "verdict": {"enum": ["ALLOW", "DENY", "REQUIRES_APPROVAL"]},
-        "reason_code": {"type": "string", "pattern": "^[A-Z_]+$"},
-        "matched_rule": {"type": "string"},
-        "reason": {"type": "string"}
+        "verdict": {
+          "enum": [
+            "ALLOW",
+            "DENY",
+            "REQUIRES_APPROVAL"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[A-Z_]+$"
+        },
+        "matched_rule": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
       }
     },
     "rfc3339": {

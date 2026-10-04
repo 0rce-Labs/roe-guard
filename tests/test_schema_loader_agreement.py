@@ -1,6 +1,6 @@
 """Schema/loader agreement over every manifest fixture plus three inline vectors.
 
-The inline vectors come from the sixth-round architect note: no fixture
+The inline vectors cover loader-only checks (SPEC §14.8): no fixture
 is added and the manifest stays at 22 entries.
 """
 
@@ -60,7 +60,7 @@ def test_manifest_agreement(name):
             assert _schema_errors(document) == [], name
 
 
-# --- inline vectors (sixth-round note; fixture count stays 22) ----------------
+# --- inline vectors (SPEC §14.8; fixture count stays 22) -----------------------
 
 _BASE = {
     "schema_version": 2,

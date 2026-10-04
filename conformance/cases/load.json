@@ -32,7 +32,7 @@
     },
     {
       "id": "load-005-version-float",
-      "description": "schema_version 2.0 is an integral float; the loader rejects it (sixth round).",
+      "description": "schema_version 2.0 is an integral float; the loader rejects it.",
       "policy": {"schema_version": 2.0, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}},
       "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
@@ -102,42 +102,42 @@
     },
     {
       "id": "load-015-methods-empty",
-      "description": "Given methods must be non-empty (fifth round).",
+      "description": "Given methods must be non-empty.",
       "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": []}]}}},
       "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-01T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
     },
     {
       "id": "load-016-egress-http-null",
-      "description": "egress.http must be a mapping (fifth round).",
+      "description": "egress.http must be a mapping.",
       "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "egress": {"default": "deny", "http": null}},
       "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-01T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
     },
     {
       "id": "load-017-sandbox-filesystem-null",
-      "description": "sandbox.filesystem must be a mapping (fifth round).",
+      "description": "sandbox.filesystem must be a mapping.",
       "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "sandbox": {"filesystem": null}},
       "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
     },
     {
       "id": "load-018-approval-null",
-      "description": "approval must be a mapping (fifth round).",
+      "description": "approval must be a mapping.",
       "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "approval": null},
       "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
     },
     {
       "id": "load-019-pids-max-float",
-      "description": "pids_max 256.0 is an integral float; the loader rejects it (sixth round).",
+      "description": "pids_max 256.0 is an integral float; the loader rejects it.",
       "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "sandbox": {"resources": {"pids_max": 256.0}}},
       "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
     },
     {
       "id": "load-020-port-float",
-      "description": "A float port element is rejected by the loader (sixth round).",
+      "description": "A float port element is rejected by the loader.",
       "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443.0]}]}}},
       "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-01T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}

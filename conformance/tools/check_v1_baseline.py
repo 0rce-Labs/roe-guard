@@ -5,7 +5,7 @@ Usage:
     python conformance/tools/check_v1_baseline.py [--roe-guard-path DIR]
 
 ``--roe-guard-path`` is inserted at ``sys.path[0]`` so the checks can run
-against a pristine baseline checkout (see the T23 card, step 11).
+against a pristine baseline checkout (see conformance/README.md).
 
 The tool writes each case policy to a temporary ``.yaml`` file (JSON is a
 valid YAML subset), loads it with the v1 entry points only, and compares
@@ -49,6 +49,7 @@ def main() -> int:
         ) as fh:
             json.dump(case["policy"], fh)
             path = fh.name
+        parse_failed = False
         try:
             decision = enforce(
                 Engagement(policy=load_policy(path)),
@@ -57,17 +58,19 @@ def main() -> int:
                 now=_parse_now(case["input"]["now"]),
             )
             verdict, reason = decision.outcome.value, decision.reason
-        except PolicyParseError as exc:
-            verdict = "DENY"
-            # Card: POLICY_INVALID cases carry no free-text reason; the
-            # parse error message is not comparable across versions.
-            reason = "POLICY_INVALID" if expected.get("reason") is None else str(exc)
+        except PolicyParseError:
+            # POLICY_INVALID cases carry no free-text reason; the parse error
+            # message is not comparable across versions.
+            parse_failed, verdict, reason = True, "DENY", None
         finally:
             Path(path).unlink(missing_ok=True)
 
+        want_invalid = expected["reason_code"] == "POLICY_INVALID"
         want_reason = expected.get("reason")
-        if verdict != expected["verdict"] or (
-            want_reason is not None and reason != want_reason
+        if (
+            parse_failed != want_invalid
+            or verdict != expected["verdict"]
+            or (want_reason is not None and reason != want_reason)
         ):
             failures.append(
                 f"  {case['id']}: expected {expected['verdict']}/{expected.get('reason')!r}, got {verdict}/{reason!r}"

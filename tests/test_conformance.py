@@ -1,7 +1,7 @@
 """Conformance runner: every case in conformance/cases runs against roe-guard.
 
 Expectations are hand-written from the SPEC §14.4–§14.5 tables and then
-verified by this runner (card step 4).
+verified by this runner (see conformance/README.md).
 """
 
 import json

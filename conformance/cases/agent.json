@@ -48,7 +48,7 @@
       "id": "agent-007-runtime-not-listed",
       "description": "Step 0c: a runtime outside the allowlist denies.",
       "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
-      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": "foundry"}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": "other-runtime"}},
       "expected": {"verdict": "DENY", "reason_code": "AGENT_RUNTIME_NOT_ALLOWED", "matched_rule": "agent.runtime"}
     },
     {
@@ -71,6 +71,34 @@
       "policy": {"schema_version": 2, "engagement_id": "agent-egress", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
       "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "GET", "now": "2026-10-01T10:00:00Z", "agent": null},
       "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISSING", "matched_rule": "agent.id"}
+    },
+    {
+      "id": "agent-011-star-crosses-slash",
+      "description": "Step 0b: '*' in the id glob also covers '/'.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": "mcp"}},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "agent-012-whole-id-no-prefix",
+      "description": "Step 0b: the glob matches the whole id; a longer id with the pattern as prefix does not match.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1"}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": "mcp"}},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISMATCH", "matched_rule": "agent.id"}
+    },
+    {
+      "id": "agent-013-no-runtime-list-null-runtime",
+      "description": "Step 0c: without a runtime list any runtime passes, including none.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*"}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": null}},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "agent-014-no-runtime-list-any-runtime",
+      "description": "Step 0c: without a runtime list any runtime string passes.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*"}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": "other-runtime"}},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
     }
   ]
 }
