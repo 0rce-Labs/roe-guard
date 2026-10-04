@@ -1,0 +1,370 @@
+{
+  "format": 1,
+  "suite": "egress",
+  "cases": [
+    {
+      "id": "egr-000-policy",
+      "description": "Reference v2 policy for the egress suite.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "GET", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[0]"}
+    },
+    {
+      "id": "egr-001-method-post",
+      "description": "E9: POST against a GET-only entry.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "POST", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_METHOD_NOT_ALLOWED", "matched_rule": "egress.http.allow[0]"}
+    },
+    {
+      "id": "egr-002-method-null",
+      "description": "E9: null method against a methods-restricted entry.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_METHOD_NOT_ALLOWED", "matched_rule": "egress.http.allow[0]"}
+    },
+    {
+      "id": "egr-003-method-lowercase",
+      "description": "E9: method comparison is case-sensitive.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "get", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_METHOD_NOT_ALLOWED", "matched_rule": "egress.http.allow[0]"}
+    },
+    {
+      "id": "egr-004-port-not-allowed",
+      "description": "E8: port 80 on a 443-only entry.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 80, "method": "GET", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_PORT_NOT_ALLOWED", "matched_rule": "egress.http.allow[0]"}
+    },
+    {
+      "id": "egr-005-second-entry-8443",
+      "description": "E10: second allow entry without methods.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "img.cdn.example.com", "port": 8443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[1]"}
+    },
+    {
+      "id": "egr-006-upper-trailing-dot",
+      "description": "E7: target normalization (upper case + trailing dot).",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "IMG.CDN.EXAMPLE.COM.", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[1]"}
+    },
+    {
+      "id": "egr-007-host-deny",
+      "description": "E6: explicit host deny.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "bad.cdn.example.com", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_DENIED", "matched_rule": "egress.http.deny[0]"}
+    },
+    {
+      "id": "egr-008-cidr-allow",
+      "description": "E10: CIDR allow entry.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "198.51.100.10", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[2]"}
+    },
+    {
+      "id": "egr-009-cidr-deny",
+      "description": "E6: CIDR deny entry.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "198.51.100.200", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_DENIED", "matched_rule": "egress.http.deny[1]"}
+    },
+    {
+      "id": "egr-010-ip-not-allowed",
+      "description": "E7: IP literal outside every allow CIDR.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "203.0.113.5", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_NOT_ALLOWED", "matched_rule": "egress.http.allow"}
+    },
+    {
+      "id": "egr-011-name-not-allowed",
+      "description": "E7: name outside every allow glob.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "*.cdn.example.com", "ports": [443, 8443]}, {"cidr": "198.51.100.0/24", "ports": [443]}], "deny": [{"host": "bad.cdn.example.com"}, {"cidr": "198.51.100.128/25"}]}, "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "other.example.org", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_NOT_ALLOWED", "matched_rule": "egress.http.allow"}
+    },
+    {
+      "id": "egr-020-imds-169254",
+      "description": "E4: AWS instance metadata address.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "169.254.169.254", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-021-imds-azure",
+      "description": "E4: Azure instance metadata address.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "168.63.129.16", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-022-imds-alibaba",
+      "description": "E4: Alibaba instance metadata address.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "100.100.100.200", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-023-imds-gcp-ipv6",
+      "description": "E4: GCP metadata IPv6 address.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "fd00:ec2::254", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-024-imds-mapped-aws",
+      "description": "E4: IPv4-mapped spelling of the AWS metadata address.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "::ffff:169.254.169.254", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-025-imds-mapped-alibaba",
+      "description": "E4: IPv4-mapped spelling of the Alibaba metadata address.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "::ffff:100.100.100.200", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-026-imds-linklocal-v6",
+      "description": "E4: IPv6 link-local target.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "fe80::1", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-027-imds-gcp-name",
+      "description": "E4: GCP metadata name.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "metadata.google.internal", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-028-imds-gcp-name-upper",
+      "description": "E4: GCP metadata name in upper case with a trailing dot.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "METADATA.GOOGLE.INTERNAL.", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-029-imds-short-metadata",
+      "description": "E4 (ninth round): the short cloud-search alias 'metadata'.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "metadata", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-030-imds-instance-data",
+      "description": "E4 (ninth round): the short cloud-search alias 'instance-data'.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-allow-all", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80, 443]}, {"cidr": "0.0.0.0/0", "ports": [80, 443]}, {"cidr": "::/0", "ports": [80, 443]}]}}},
+      "input": {"kind": "egress", "host": "instance-data", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_IMDS_DENIED", "matched_rule": ""}
+    },
+    {
+      "id": "egr-031-glob-no-ip",
+      "description": "E7 (ninth round): a host glob never matches an IP literal.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-glob-only", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "203.0.113.5", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_NOT_ALLOWED", "matched_rule": "egress.http.allow"}
+    },
+    {
+      "id": "egr-032-invalid-empty",
+      "description": "E3: empty host.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-033-invalid-space",
+      "description": "E3: host containing a space.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "exa mple.com", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-034-invalid-bracketed-ipv6",
+      "description": "E3: bracketed IPv6 spelling is invalid.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "[2001:db8::1]", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-035-invalid-decimal-ip",
+      "description": "E3: canonical non-numeric name rule rejects the integer spelling of an IP.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "3232235777", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-036-invalid-hex-label",
+      "description": "E3: hex label spelling is rejected.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "10.0x1", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-037-invalid-leading-zero",
+      "description": "E3: octal spelling is rejected.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "010.0.0.1", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-038-invalid-label-too-long",
+      "description": "E3: label longer than 63 characters is rejected.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-039-invalid-newline",
+      "description": "E3 (fifth round): trailing newline in the host.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com\n", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-040-invalid-port-zero",
+      "description": "E3: port 0.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 0, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-041-invalid-port-65536",
+      "description": "E3: port above the range.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 65536, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-042-invalid-port-bool",
+      "description": "E3 (sixth round): bool port is invalid.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": true, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-043-invalid-port-float",
+      "description": "E3 (sixth round): integral-valued float port is invalid.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443.0, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-044-invalid-port-string",
+      "description": "E3: string port is invalid.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": "443", "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-045-invalid-empty-method",
+      "description": "E3: empty method.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_TARGET_INVALID", "matched_rule": ""}
+    },
+    {
+      "id": "egr-046-not-configured-v2",
+      "description": "E5: v2 policy without an egress block.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-none", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_NOT_CONFIGURED", "matched_rule": "egress"}
+    },
+    {
+      "id": "egr-047-not-configured-v1",
+      "description": "E5: v1 policy (no schema_version key).",
+      "policy": {"engagement_id": "egress-v1", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}], "deny": []}, "actions": {"allow": ["recon"], "deny": []}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_NOT_CONFIGURED", "matched_rule": "egress"}
+    },
+    {
+      "id": "egr-048-dns-only",
+      "description": "E7: a dns-only egress block allows no HTTP host.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-dns-only", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "dns": {"allow": ["*.example.com"]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_NOT_ALLOWED", "matched_rule": "egress.http.allow"}
+    },
+    {
+      "id": "egr-049-window-outside",
+      "description": "E1: egress outside the time window.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "GET", "now": "2026-10-20T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_NOT_ACTIVE", "matched_rule": "valid_from/valid_until"}
+    },
+    {
+      "id": "egr-050-blackout",
+      "description": "E2: egress inside a blackout window.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-blackout", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "blackout_windows": [{"start": "2026-10-02T09:00:00Z", "end": "2026-10-02T11:00:00Z", "reason": "maintenance"}], "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "GET", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "BLACKOUT_WINDOW", "matched_rule": "blackout_windows[0]"}
+    },
+    {
+      "id": "egr-051-ipv6-allow-bracketed-target",
+      "description": "E10: IPv6 literal target with an IPv6 CIDR allow; target spelling is bracketed.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-v6", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"cidr": "2001:db8::/32", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "2001:db8::42", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[0]"}
+    },
+    {
+      "id": "egr-052-mapped-deny-both-spellings",
+      "description": "E6 (ninth round 1): deny written for the IPv4 address catches the IPv4-mapped spelling.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-mapped", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"cidr": "198.51.100.0/24", "ports": [443]}, {"cidr": "::/0", "ports": [443]}], "deny": [{"cidr": "198.51.100.128/25"}]}}},
+      "input": {"kind": "egress", "host": "::ffff:198.51.100.200", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_DENIED", "matched_rule": "egress.http.deny[0]"}
+    },
+    {
+      "id": "egr-053-mapped-cidr-deny-catches-ipv4",
+      "description": "E6 (ninth round 1): a ::ffff:0:0/96-scoped deny catches the plain IPv4 spelling.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-mapped", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"cidr": "198.51.100.0/24", "ports": [443]}, {"cidr": "::/0", "ports": [443]}], "deny": [{"cidr": "::ffff:198.51.100.128/120"}]}}},
+      "input": {"kind": "egress", "host": "198.51.100.5", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_DENIED", "matched_rule": "egress.http.deny[0]"}
+    },
+    {
+      "id": "egr-054-mapped-not-allowed",
+      "description": "E7 (ninth round 1): an IPv6 allow cannot widen the IPv4 allow list for a mapped target.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-mapped", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"cidr": "198.51.100.0/24", "ports": [443]}, {"cidr": "::/0", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "::ffff:203.0.113.5", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_NOT_ALLOWED", "matched_rule": "egress.http.allow"}
+    },
+    {
+      "id": "egr-055-pattern-normalized-deny",
+      "description": "E6 (ninth round 2): deny patterns are normalized like targets.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-pattern", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*.example.com", "ports": [443]}], "deny": [{"host": "Bad.Example.COM."}]}}},
+      "input": {"kind": "egress", "host": "bad.example.com", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "EGRESS_HOST_DENIED", "matched_rule": "egress.http.deny[0]"}
+    },
+    {
+      "id": "egr-056-single-label-allowed",
+      "description": "E10 (ninth round 3): single-label names are valid targets.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-single", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "*", "ports": [80]}]}}},
+      "input": {"kind": "egress", "host": "localhost", "port": 80, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[0]"}
+    },
+    {
+      "id": "egr-057-e9-mixed-order-one",
+      "description": "E9 (ninth round 4): restricted entry listed first, unrestricted second; POST is allowed by the unrestricted entry.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-e9", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "POST", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[1]"}
+    },
+    {
+      "id": "egr-058-e9-mixed-order-two",
+      "description": "E9 (ninth round 4): same entries in the other order give the same verdict.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-e9", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}, {"host": "api.example.com", "ports": [443], "methods": ["GET"]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "POST", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[0]"}
+    },
+    {
+      "id": "egr-059-e9-mixed-null-method",
+      "description": "E9 (ninth round 4): null method is allowed when an unrestricted entry matches.",
+      "policy": {"schema_version": 2, "engagement_id": "egress-e9", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-15T00:00:00Z", "scope": {"allow": [{"hostname": "*"}]}, "actions": {"allow": ["tool.http.get"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": ["GET"]}, {"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "EGRESS_ALLOWED", "matched_rule": "egress.http.allow[1]"}
+    }
+  ]
+}

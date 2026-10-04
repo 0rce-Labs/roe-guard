@@ -1,0 +1,76 @@
+{
+  "format": 1,
+  "suite": "agent",
+  "cases": [
+    {
+      "id": "agent-001-policy",
+      "description": "Reference v2 policy for the agent suite.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": "mcp"}},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "agent-002-missing-identity",
+      "description": "Step 0a: a policy with an agent block denies identity-less callers.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISSING", "matched_rule": "agent.id"}
+    },
+    {
+      "id": "agent-003-empty-id",
+      "description": "Step 0a: empty agent id is treated as missing.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "", "runtime": "mcp"}},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISSING", "matched_rule": "agent.id"}
+    },
+    {
+      "id": "agent-004-mismatch",
+      "description": "Step 0b: a different agent id does not match the glob.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a2/sandbox/s-1", "runtime": "mcp"}},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISMATCH", "matched_rule": "agent.id"}
+    },
+    {
+      "id": "agent-005-case-sensitive",
+      "description": "Step 0b: glob matching is case-sensitive (Agent vs agent).",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/Agent/a1/sandbox/s-42", "runtime": "mcp"}},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISMATCH", "matched_rule": "agent.id"}
+    },
+    {
+      "id": "agent-006-runtime-null",
+      "description": "Step 0c: a null runtime when the policy lists runtimes denies.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": null}},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_RUNTIME_NOT_ALLOWED", "matched_rule": "agent.runtime"}
+    },
+    {
+      "id": "agent-007-runtime-not-listed",
+      "description": "Step 0c: a runtime outside the allowlist denies.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": "foundry"}},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_RUNTIME_NOT_ALLOWED", "matched_rule": "agent.runtime"}
+    },
+    {
+      "id": "agent-008-step0-before-step1",
+      "description": "Step 0 runs before the time-window step.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-11-01T00:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISSING", "matched_rule": "agent.id"}
+    },
+    {
+      "id": "agent-009-no-block-passes",
+      "description": "Without an agent block the identity is not required (v1 behavior).",
+      "policy": {"schema_version": 2, "engagement_id": "agent-noblock", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/s-42", "runtime": "mcp"}},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "agent-010-agent-egress-missing",
+      "description": "E0 on the egress ladder: identity-less egress on an agent policy denies.",
+      "policy": {"schema_version": 2, "engagement_id": "agent-egress", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "agent": {"id": "spiffe://example.org/tenant/t1/agent/a1/sandbox/*", "runtime": ["mcp"]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": "GET", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "AGENT_ID_MISSING", "matched_rule": "agent.id"}
+    }
+  ]
+}

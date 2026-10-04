@@ -1,0 +1,153 @@
+{
+  "format": 1,
+  "suite": "ladder",
+  "cases": [
+    {
+      "id": "lad-000-policy",
+      "description": "Reference v2 policy for the ladder suite; reused by tests as the base document.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "lad-001-window-before",
+      "description": "Step 1: now before valid_from.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.read", "now": "2026-09-30T23:59:59Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_NOT_ACTIVE", "matched_rule": "valid_from/valid_until"}
+    },
+    {
+      "id": "lad-002-window-after",
+      "description": "Step 1: now at valid_until is outside.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.read", "now": "2026-10-31T23:59:59Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_NOT_ACTIVE", "matched_rule": "valid_from/valid_until"}
+    },
+    {
+      "id": "lad-003-blackout-inside",
+      "description": "Step 2: inside the blackout window.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.read", "now": "2026-10-01T12:30:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "BLACKOUT_WINDOW", "matched_rule": "blackout_windows[0]"}
+    },
+    {
+      "id": "lad-004-blackout-end-exclusive",
+      "description": "Step 2: blackout end is outside the window.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.read", "now": "2026-10-01T13:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "lad-005-cidr-deny-first-match",
+      "description": "Step 3: CIDR deny wins and reports the first matching deny entry.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.5.9", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_DENIED", "matched_rule": "scope.deny[0]"}
+    },
+    {
+      "id": "lad-006-hostname-deny-overrides-allow",
+      "description": "Step 3: db.svc.example.com matches the deny glob and the allow glob; deny wins.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "db.svc.example.com", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_DENIED", "matched_rule": "scope.deny[1]"}
+    },
+    {
+      "id": "lad-007-glob-star-covers-dots",
+      "description": "Step 4: * in the hostname glob also covers dots.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "a.b.svc.example.com", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "lad-008-ipv6-allow",
+      "description": "Step 4/7: IPv6 literal matches the IPv6 allow CIDR.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "2001:db8::42", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "lad-009-empty-scope",
+      "description": "Step 4: empty scope denies everything.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {}, "actions": {"allow": ["tool.fs.read"], "deny": []}, "approval_required_for": []},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_NOT_IN_SCOPE", "matched_rule": "scope.allow"}
+    },
+    {
+      "id": "lad-010-action-deny",
+      "description": "Step 5: explicitly denied action.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.delete", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "ACTION_DENIED", "matched_rule": "actions.deny"}
+    },
+    {
+      "id": "lad-011-approval-required",
+      "description": "Step 6: approval-required action.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.proc.spawn", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "REQUIRES_APPROVAL", "reason_code": "APPROVAL_REQUIRED", "matched_rule": "approval_required_for"}
+    },
+    {
+      "id": "lad-012-fail-closed-default",
+      "description": "Step 8: unknown action denies with an empty matched_rule.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.unknown", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "ACTION_NOT_ALLOWED", "matched_rule": ""}
+    },
+    {
+      "id": "lad-013-observe-same-verdicts",
+      "description": "mode: observe keeps every verdict; the platform enforces, not the library.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-observe", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "mode": "observe", "scope": {"allow": [{"cidr": "10.20.0.0/16"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["tool.fs.read"], "deny": ["tool.fs.delete"]}},
+      "input": {"kind": "action", "target": "10.20.5.9", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_DENIED", "matched_rule": "scope.deny[0]"}
+    },
+    {
+      "id": "lad-014-observe-allow",
+      "description": "mode: observe ALLOW verdict unchanged.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-observe", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "mode": "observe", "scope": {"allow": [{"cidr": "10.20.0.0/16"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["tool.fs.read"], "deny": ["tool.fs.delete"]}},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "lad-015-x-vendor-ignored",
+      "description": "x-vendor keys at the root and nested are ignored entirely.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-x", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "x-vendor": {"tier": 1}, "scope": {"allow": [{"cidr": "10.20.0.0/16", "x-tag": "t"}], "deny": []}, "actions": {"allow": ["tool.fs.read"], "x-note": "n"}},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "lad-016-ipv6-out-of-scope",
+      "description": "Step 4: an IPv6 literal outside every allow CIDR.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "2001:db9::1", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_NOT_IN_SCOPE", "matched_rule": "scope.allow"}
+    },
+    {
+      "id": "lad-017-cidr-boundary-inside",
+      "description": "Step 4: last address of the allow CIDR is inside.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.255.255", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "lad-018-cidr-boundary-outside",
+      "description": "Step 4: one past the allow CIDR is outside.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.21.0.0", "action_type": "tool.fs.read", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_NOT_IN_SCOPE", "matched_rule": "scope.allow"}
+    },
+    {
+      "id": "lad-019-second-allow-entry",
+      "description": "Step 7: second action in actions.allow.",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "2001:db8::/32"}, {"hostname": "*.svc.example.com"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db.*.example.com"}]}, "actions": {"allow": ["tool.fs.read", "tool.http.get", "tool.proc.spawn"], "deny": ["tool.fs.delete"]}, "approval_required_for": ["tool.proc.spawn"], "blackout_windows": [{"start": "2026-10-01T12:00:00Z", "end": "2026-10-01T13:00:00Z", "reason": null}]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.http.get", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    },
+    {
+      "id": "lad-020-null-list-means-empty",
+      "description": "Step 7: null allow lists are treated as empty (v1 rule carried into v2 fields).",
+      "policy": {"schema_version": 2, "engagement_id": "ladder-nulls", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-31T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}], "deny": null}, "actions": null},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "tool.http.get", "now": "2026-10-02T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "ACTION_NOT_ALLOWED", "matched_rule": ""}
+    }
+  ]
+}
