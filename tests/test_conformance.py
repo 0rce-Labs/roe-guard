@@ -12,6 +12,7 @@ from jsonschema import Draft202012Validator
 
 from roe_guard import AgentIdentity, Engagement, ReasonCode, parse_policy
 from roe_guard.engine import enforce, enforce_egress
+from roe_guard.exceptions import PolicyParseError
 
 REPO = Path(__file__).resolve().parent.parent
 CASES = REPO / "conformance" / "cases"
@@ -56,7 +57,9 @@ def _evaluate(case):
     agent = _agent(input_doc.get("agent"))
     try:
         policy = parse_policy(policy_doc)
-    except Exception:
+    except PolicyParseError:
+        # The vectors treat any parse failure as POLICY_INVALID; a
+        # non-mapping document raises with field "<top>".
         return "DENY", "POLICY_INVALID", ""
     engagement = Engagement(policy=policy)
     if input_doc["kind"] == "egress":
@@ -80,7 +83,7 @@ def _evaluate(case):
 
 
 def _parse_now(value):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     normalised = value.replace("Z", "+00:00")
     return datetime.fromisoformat(normalised)
@@ -101,8 +104,6 @@ def test_case(case):
     if "matched_rule" in expected:
         assert matched_rule == expected["matched_rule"], case["id"]
     if "reason" in expected:
-        from roe_guard.exceptions import PolicyParseError
-
         try:
             parse_policy(case["policy"])
             policy = parse_policy(case["policy"])
