@@ -1,0 +1,153 @@
+{
+  "format": 1,
+  "suite": "load",
+  "cases": [
+    {
+      "id": "load-001-version-3",
+      "description": "schema_version 3 is unsupported.",
+      "policy": {"schema_version": 3, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-002-version-string",
+      "description": "schema_version \"2\" is not an integer.",
+      "policy": {"schema_version": "2", "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-003-version-bool",
+      "description": "schema_version true is a bool, not an integer.",
+      "policy": {"schema_version": true, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-004-version-null",
+      "description": "schema_version null is invalid in v2 (mandatory).",
+      "policy": {"schema_version": null, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-005-version-float",
+      "description": "schema_version 2.0 is an integral float; the loader rejects it.",
+      "policy": {"schema_version": 2.0, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-006-unknown-top-key",
+      "description": "v2 rejects unknown top-level keys.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "foo": 1},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-007-unknown-nested-key",
+      "description": "v2 rejects unknown keys inside actions.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"], "approve": ["tool.deploy"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-008-egress-without-version",
+      "description": "A v1 policy carrying the v2-reserved egress key is rejected.",
+      "policy": {"engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "egress": {"default": "deny"}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-009-egress-default-allow",
+      "description": "egress.default accepts only deny.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "egress": {"default": "allow", "http": {"allow": [{"host": "api.example.com", "ports": [443]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-010-mode-audit",
+      "description": "mode accepts only enforce and observe.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "mode": "audit", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-011-imds-allow",
+      "description": "sandbox.imds accepts only deny.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "sandbox": {"imds": "allow"}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-012-on-timeout-allow",
+      "description": "approval.on_timeout accepts only deny.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "approval": {"timeout_seconds": 300, "on_timeout": "allow"}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-013-window-order",
+      "description": "valid_from after valid_until is rejected (loader check).",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-02T00:00:00Z", "valid_until": "2026-10-01T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-014-policy-is-array",
+      "description": "A non-mapping policy is POLICY_INVALID.",
+      "policy": ["not", "a", "mapping"],
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-015-methods-empty",
+      "description": "Given methods must be non-empty.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443], "methods": []}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-016-egress-http-null",
+      "description": "egress.http must be a mapping.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "egress": {"default": "deny", "http": null}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-017-sandbox-filesystem-null",
+      "description": "sandbox.filesystem must be a mapping.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "sandbox": {"filesystem": null}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-018-approval-null",
+      "description": "approval must be a mapping.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "approval": null},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-019-pids-max-float",
+      "description": "pids_max 256.0 is an integral float; the loader rejects it.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "sandbox": {"resources": {"pids_max": 256.0}}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-020-port-float",
+      "description": "A float port element is rejected by the loader.",
+      "policy": {"schema_version": 2, "engagement_id": "load-eng", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "egress": {"default": "deny", "http": {"allow": [{"host": "api.example.com", "ports": [443.0]}]}}},
+      "input": {"kind": "egress", "host": "api.example.com", "port": 443, "method": null, "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "load-021-x-vendor-valid",
+      "description": "x-vendor extensions load and evaluate normally.",
+      "policy": {"schema_version": 2, "engagement_id": "load-x", "valid_from": "2026-10-01T00:00:00Z", "valid_until": "2026-10-02T00:00:00Z", "scope": {"allow": [{"hostname": "*.api.example.com"}]}, "actions": {"allow": ["tool.http.get"]}, "x-vendor": {"tier": 1}},
+      "input": {"kind": "action", "target": "api.x.api.example.com", "action_type": "tool.http.get", "now": "2026-10-01T10:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow"}
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+{
+  "format": 1,
+  "suite": "v1-golden",
+  "cases": [
+    {
+      "id": "v1g-001-expired-before-start",
+      "description": "Now before valid_from denies (step 1).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-07-31T23:59:59Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_NOT_ACTIVE", "matched_rule": "valid_from/valid_until", "reason": "policy expired or not yet active"}
+    },
+    {
+      "id": "v1g-002-start-inclusive",
+      "description": "valid_from itself is inside the window (step 7 allow).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-08-01T00:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow", "reason": "action type 'recon' allowed"}
+    },
+    {
+      "id": "v1g-003-until-exclusive",
+      "description": "valid_until itself is outside the window.",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-08-28T23:59:59Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_NOT_ACTIVE", "matched_rule": "valid_from/valid_until", "reason": "policy expired or not yet active"}
+    },
+    {
+      "id": "v1g-004-blackout-start",
+      "description": "Blackout start denies with the window reason (step 2).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-08-15T00:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "BLACKOUT_WINDOW", "matched_rule": "blackout_windows[0]", "reason": "inside blackout window: müşteri bakım penceresi"}
+    },
+    {
+      "id": "v1g-005-blackout-end-exclusive",
+      "description": "Blackout end is outside the window.",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-08-16T00:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow", "reason": "action type 'recon' allowed"}
+    },
+    {
+      "id": "v1g-006-scope-deny",
+      "description": "Explicit CIDR deny overrides allow (step 3).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.5.10", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_DENIED", "matched_rule": "scope.deny[0]", "reason": "target explicitly denied in scope"}
+    },
+    {
+      "id": "v1g-007-not-in-scope",
+      "description": "Target matching no allow entry denies (step 4).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "203.0.113.7", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_NOT_IN_SCOPE", "matched_rule": "scope.allow", "reason": "target not in allowed scope"}
+    },
+    {
+      "id": "v1g-008-hostname-glob",
+      "description": "Hostname glob matches without resolving the name.",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "db.staging.acme.internal", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow", "reason": "action type 'recon' allowed"}
+    },
+    {
+      "id": "v1g-009-hostname-case-insensitive",
+      "description": "Hostname matching lower-cases target and pattern, so an upper-case target matches.",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "DB.STAGING.ACME.INTERNAL", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow", "reason": "action type 'recon' allowed"}
+    },
+    {
+      "id": "v1g-010-action-deny",
+      "description": "Denied action type (step 5).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "destructive", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "ACTION_DENIED", "matched_rule": "actions.deny", "reason": "action type 'destructive' explicitly denied"}
+    },
+    {
+      "id": "v1g-011-approval-required",
+      "description": "Approval-required action (step 6).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "persistence-test", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "REQUIRES_APPROVAL", "reason_code": "APPROVAL_REQUIRED", "matched_rule": "approval_required_for", "reason": "action type 'persistence-test' requires human approval"}
+    },
+    {
+      "id": "v1g-012-action-case-sensitive",
+      "description": "Action types match exactly and case-sensitively (step 8).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "Recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "ACTION_NOT_ALLOWED", "matched_rule": "", "reason": "action type not explicitly allowed"}
+    },
+    {
+      "id": "v1g-013-unknown-action",
+      "description": "Fail-closed default (step 8).",
+      "policy": {"engagement_id": "acme-fintech-2026-08", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"hostname": "*.staging.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}], "approval_required_for": ["persistence-test"], "approvers": ["ops-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "unknown-action", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "ACTION_NOT_ALLOWED", "matched_rule": "", "reason": "action type not explicitly allowed"}
+    },
+    {
+      "id": "v1g-014-demo-second-blackout",
+      "description": "Second blackout window of demo_policy.",
+      "policy": {"engagement_id": "demo-acme-2026-08", "valid_from": "2020-01-01T00:00:00Z", "valid_until": "2030-01-01T00:00:00Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "192.168.100.0/24"}, {"hostname": "*.staging.acme.internal"}, {"hostname": "ci-runner-*.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db-master.*.acme.internal"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test", "lateral-movement"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}, {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T04:00:00Z", "reason": "DB bakımı"}], "approval_required_for": ["persistence-test", "lateral-movement"], "approvers": ["ops-lead@acme.example", "security-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-09-10T03:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "BLACKOUT_WINDOW", "matched_rule": "blackout_windows[1]", "reason": "inside blackout window: DB bakımı"}
+    },
+    {
+      "id": "v1g-015-demo-hostname-deny",
+      "description": "db-master glob deny overrides the staging allow (step 3).",
+      "policy": {"engagement_id": "demo-acme-2026-08", "valid_from": "2020-01-01T00:00:00Z", "valid_until": "2030-01-01T00:00:00Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "192.168.100.0/24"}, {"hostname": "*.staging.acme.internal"}, {"hostname": "ci-runner-*.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db-master.*.acme.internal"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test", "lateral-movement"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}, {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T04:00:00Z", "reason": "DB bakımı"}], "approval_required_for": ["persistence-test", "lateral-movement"], "approvers": ["ops-lead@acme.example", "security-lead@acme.example"]},
+      "input": {"kind": "action", "target": "db-master.db1.staging.acme.internal", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "TARGET_DENIED", "matched_rule": "scope.deny[1]", "reason": "target explicitly denied in scope"}
+    },
+    {
+      "id": "v1g-016-demo-ci-runner-allow",
+      "description": "ci-runner-* prefix glob allows.",
+      "policy": {"engagement_id": "demo-acme-2026-08", "valid_from": "2020-01-01T00:00:00Z", "valid_until": "2030-01-01T00:00:00Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "192.168.100.0/24"}, {"hostname": "*.staging.acme.internal"}, {"hostname": "ci-runner-*.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db-master.*.acme.internal"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test", "lateral-movement"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}, {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T04:00:00Z", "reason": "DB bakımı"}], "approval_required_for": ["persistence-test", "lateral-movement"], "approvers": ["ops-lead@acme.example", "security-lead@acme.example"]},
+      "input": {"kind": "action", "target": "ci-runner-42.acme.internal", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow", "reason": "action type 'recon' allowed"}
+    },
+    {
+      "id": "v1g-017-demo-approval-beats-allow",
+      "description": "Action in both actions.allow and approval_required_for requires approval (step 6 before 7).",
+      "policy": {"engagement_id": "demo-acme-2026-08", "valid_from": "2020-01-01T00:00:00Z", "valid_until": "2030-01-01T00:00:00Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "192.168.100.0/24"}, {"hostname": "*.staging.acme.internal"}, {"hostname": "ci-runner-*.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db-master.*.acme.internal"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test", "lateral-movement"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}, {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T04:00:00Z", "reason": "DB bakımı"}], "approval_required_for": ["persistence-test", "lateral-movement"], "approvers": ["ops-lead@acme.example", "security-lead@acme.example"]},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "lateral-movement", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "REQUIRES_APPROVAL", "reason_code": "APPROVAL_REQUIRED", "matched_rule": "approval_required_for", "reason": "action type 'lateral-movement' requires human approval"}
+    },
+    {
+      "id": "v1g-018-demo-second-cidr-allow",
+      "description": "Second CIDR allow entry of demo_policy.",
+      "policy": {"engagement_id": "demo-acme-2026-08", "valid_from": "2020-01-01T00:00:00Z", "valid_until": "2030-01-01T00:00:00Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}, {"cidr": "192.168.100.0/24"}, {"hostname": "*.staging.acme.internal"}, {"hostname": "ci-runner-*.acme.internal"}], "deny": [{"cidr": "10.20.5.0/24"}, {"hostname": "db-master.*.acme.internal"}]}, "actions": {"allow": ["recon", "exploit", "persistence-test", "lateral-movement"], "deny": ["destructive", "data-exfil"]}, "blackout_windows": [{"start": "2026-08-15T00:00:00Z", "end": "2026-08-16T00:00:00Z", "reason": "müşteri bakım penceresi"}, {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T04:00:00Z", "reason": "DB bakımı"}], "approval_required_for": ["persistence-test", "lateral-movement"], "approvers": ["ops-lead@acme.example", "security-lead@acme.example"]},
+      "input": {"kind": "action", "target": "192.168.100.55", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "ALLOW", "reason_code": "ACTION_ALLOWED", "matched_rule": "actions.allow", "reason": "action type 'recon' allowed"}
+    },
+    {
+      "id": "v1g-019-invalid-cidr",
+      "description": "invalid_cidr.yaml fails to parse: POLICY_INVALID.",
+      "policy": {"engagement_id": "bad-cidr-engagement", "valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/99"}]}},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "v1g-020-malformed-dates",
+      "description": "malformed_dates.yaml fails to parse: POLICY_INVALID.",
+      "policy": {"engagement_id": "bad-dates-engagement", "valid_from": "not-a-real-date", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}]}},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    },
+    {
+      "id": "v1g-021-missing-required",
+      "description": "missing_required_field.yaml fails to parse: POLICY_INVALID.",
+      "policy": {"valid_from": "2026-08-01T00:00:00Z", "valid_until": "2026-08-28T23:59:59Z", "scope": {"allow": [{"cidr": "10.20.0.0/16"}]}},
+      "input": {"kind": "action", "target": "10.20.3.5", "action_type": "recon", "now": "2026-08-10T12:00:00Z", "agent": null},
+      "expected": {"verdict": "DENY", "reason_code": "POLICY_INVALID"}
+    }
+  ]
+}

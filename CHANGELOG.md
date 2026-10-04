@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Language-neutral conformance vectors under `conformance/` (v1 golden, v2 ladder, agent, egress, load errors) with a JSON Schema for case files.
+
 - v2 `egress` block and `enforce_egress()` / `Engagement.check_egress()` (host glob / CIDR / port / method; built-in deny for instance-metadata and link-local targets).
 
 - v2 `agent` block and decision-ladder step 0 (SPIFFE ID glob + runtime allowlist); keyword-only `agent=` on `enforce`, `Engagement.check`, `guarded`.

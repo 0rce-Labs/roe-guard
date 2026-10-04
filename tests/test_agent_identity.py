@@ -154,7 +154,7 @@ def test_runtime_not_listed_denied(engagement):
         engagement,
         "api.x.api.example.com",
         "tool.http.get",
-        agent=AgentIdentity(OK.id, "foundry"),
+        agent=AgentIdentity(OK.id, "other-runtime"),
     )
     assert d.outcome is DecisionType.DENY
     assert d.reason_code == "AGENT_RUNTIME_NOT_ALLOWED"
@@ -244,7 +244,7 @@ def test_agent_block_rejects_bad_values(mutate, field):
             "agent identity does not match policy",
         ),
         (
-            AgentIdentity(OK.id, "foundry"),
+            AgentIdentity(OK.id, "other-runtime"),
             "AGENT_RUNTIME_NOT_ALLOWED",
             "agent.runtime",
             "agent runtime not allowed",
