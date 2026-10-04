@@ -91,8 +91,7 @@ def _parse_now(value):
 
 def _cases():
     for document in ALL_FILES:
-        for case in document["cases"]:
-            yield case
+        yield from document["cases"]
 
 
 @pytest.mark.parametrize("case", list(_cases()), ids=lambda c: c["id"])
