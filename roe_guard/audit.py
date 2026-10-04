@@ -25,6 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from roe_guard.exceptions import AuditIntegrityError
 from roe_guard.models import (
     AuditEntry,
     AuditVerificationResult,
@@ -121,11 +122,24 @@ class AuditLog:
                 prev = payload["entry_hash"]
         return prev
 
+    def _reject_v2_tail(self) -> None:
+        """Refuse to append v1 records to a chain that contains v2 records."""
+        from roe_guard.audit_v2 import verify_chain
+
+        result = verify_chain(self.path)
+        if result.valid and result.total_entries:
+            with self.path.open("r", encoding="utf-8") as fh:
+                lines = [line for line in fh if line.strip()]
+            if lines and json.loads(lines[-1]).get("v") == 2:
+                raise AuditIntegrityError("chain contains v2 records; use AuditLogV2")
+
     def record(
         self,
         decision: Decision,
         engagement_id: str = "",
     ) -> AuditEntry:
+        self._reject_v2_tail()
+
         """Append a :class:`Decision` to the audit chain.
 
         Computes ``entry_hash`` from the previous line's hash plus the
@@ -182,6 +196,12 @@ class AuditLog:
                 - ``broken_at_index``  — index of first broken entry, or ``None``.
                 - ``reason``           — explanation, or ``None``.
         """
+        # The single verifier lives in audit_v2 and handles mixed v1→v2
+        # chains (card: AuditLog.verify() is a thin wrapper).
+        from roe_guard.audit_v2 import verify_chain
+
+        return verify_chain(self.path)
+
         expected_prev = GENESIS_PREV_HASH
         total = 0
 

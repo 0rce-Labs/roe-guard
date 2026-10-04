@@ -8,6 +8,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Audit record v2 (`AuditLogV2`, `verify_chain`): `seq`, all fields hashed, RFC 8785 JCS, raw RFC 3339 UTC timestamps, single writer (flock), optional ed25519-signed checkpoints (`roe-guard[signing]`); mixed v1→v2 chains verify; conformance vectors under `conformance/audit/` and `conformance/jcs/`.
+
 - Language-neutral conformance vectors under `conformance/` (v1 golden, v2 ladder, agent, egress, load errors) with a JSON Schema for case files.
 
 - v2 `egress` block and `enforce_egress()` / `Engagement.check_egress()` (host glob / CIDR / port / method; built-in deny for instance-metadata and link-local targets).

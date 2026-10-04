@@ -1,0 +1,54 @@
+{
+  "format": 1,
+  "suite": "jcs",
+  "cases": [
+    {
+      "id": "jcs-rfc-ordering",
+      "description": "RFC 8785 §3.2.3 UTF-16 key ordering example.",
+      "input_json": "{\"€\": \"Euro Sign\", \"\\r\": \"Carriage Return\", \"דּ\": \"Hebrew Letter Dalet With Dagesh\", \"1\": \"One\", \"😀\": \"Emoji: Grinning Face\", \"\": \"Control\", \"ö\": \"Latin Small Letter O With Diaeresis\"}",
+      "expected_hex": "7b225c72223a2243617272696167652052657475726e222c2231223a224f6e65222c22c280223a22436f6e74726f6c222c22c3b6223a224c6174696e20536d616c6c204c6574746572204f205769746820446961657265736973222c22e282ac223a224575726f205369676e222c22f09f9880223a22456d6f6a693a204772696e6e696e672046616365222c22efacb3223a22486562726577204c65747465722044616c6574205769746820446167657368227d"
+    },
+    {
+      "id": "jcs-control-escape",
+      "description": "Control characters use lowercase \\u00xx escapes.",
+      "input_json": "{\"k\": \"\\\"\\\\\"}",
+      "expected_hex": "7b226b223a225c225c5c227d"
+    },
+    {
+      "id": "jcs-quote-backslash",
+      "description": "Quote and backslash escaping.",
+      "input_json": "{\"k\": \"\\\"\\\\\"}",
+      "expected_hex": "7b226b223a225c225c5c227d"
+    },
+    {
+      "id": "jcs-literals",
+      "description": "true/false/null serialization.",
+      "input_json": "{\"a\":true,\"b\":false,\"c\":null}",
+      "expected_hex": "7b2261223a747275652c2262223a66616c73652c2263223a6e756c6c7d"
+    },
+    {
+      "id": "jcs-array-order",
+      "description": "Array order is preserved.",
+      "input_json": "{\"a\":[3,1,2]}",
+      "expected_hex": "7b2261223a5b332c312c325d7d"
+    },
+    {
+      "id": "jcs-nested",
+      "description": "Nested objects are ordered at every level.",
+      "input_json": "{\"b\": {\"z\": 1, \"a\": 2}, \"a\": 3}",
+      "expected_hex": "7b2261223a332c2262223a7b2261223a322c227a223a317d7d"
+    },
+    {
+      "id": "jcs-error-float",
+      "description": "Floats are unsupported.",
+      "input_json": "{\"x\":1.5}",
+      "expected_error": "UNSUPPORTED_NUMBER"
+    },
+    {
+      "id": "jcs-error-surrogate",
+      "description": "Lone surrogates are invalid.",
+      "input_json": "{\"x\":\"\\ud800\"}",
+      "expected_error": "LONE_SURROGATE"
+    }
+  ]
+}

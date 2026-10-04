@@ -12,6 +12,14 @@ chain through :class:`AuditLog`.
 """
 
 from roe_guard.audit import GENESIS_PREV_HASH, AuditLog
+from roe_guard.audit_v2 import (
+    AuditLogV2,
+    AuditReasonCode,
+    AuditWriterLockedError,
+    CheckpointSigner,
+    Ed25519Signer,
+    verify_chain,
+)
 from roe_guard.engine import enforce, enforce_egress, raise_if_expired
 from roe_guard.exceptions import (
     ApprovalRequiredError,
@@ -64,12 +72,17 @@ __all__ = [
     "AuditEntry",
     "AuditIntegrityError",
     "AuditLog",
+    "AuditLogV2",
+    "AuditReasonCode",
     "AuditVerificationResult",
+    "AuditWriterLockedError",
     "BlackoutWindow",
+    "CheckpointSigner",
     "CredentialSpec",
     "Decision",
     "DecisionType",
     "DnsEgressSpec",
+    "Ed25519Signer",
     "EgressSpec",
     "EnforcementMode",
     "Engagement",
@@ -96,5 +109,6 @@ __all__ = [
     "load_policy",
     "parse_policy",
     "raise_if_expired",
+    "verify_chain",
     "window",
 ]

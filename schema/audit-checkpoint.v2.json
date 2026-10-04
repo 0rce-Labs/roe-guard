@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/0rce-Labs/roe-guard/main/schema/audit-checkpoint.v2.json",
+  "title": "roe-guard audit checkpoint v2",
+  "type": "object",
+  "required": ["v", "chain_id", "seq", "head_hash", "timestamp", "key_id", "sig"],
+  "additionalProperties": false,
+  "properties": {
+    "v": {"const": 2},
+    "chain_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+    "seq": {"type": "integer", "minimum": 0},
+    "head_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$"},
+    "key_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sig": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$"}
+  }
+}
