@@ -492,6 +492,7 @@ class AuditVerificationResult:
     total_entries: int
     broken_at_index: int | None = None
     reason: str | None = None
+    reason_code: str | None = None
 
 
 __all__ = [

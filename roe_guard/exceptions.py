@@ -62,6 +62,10 @@ class PolicyParseError(RoeGuardError):
         self.reason = reason
 
 
+class AuditWriterLockedError(RoeGuardError):
+    """Another writer holds the audit file lock."""
+
+
 class AuditIntegrityError(RoeGuardError):
     """Raised when an audit log's hash chain fails integrity verification.
 

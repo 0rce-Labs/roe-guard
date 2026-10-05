@@ -509,6 +509,7 @@ ardından gelen `\n`'dir. Kayıtta tam olarak şu 16 anahtar bulunur:
 - Anahtarlar UTF-16 kod birimi sırasına göre sıralanır.
 - Kısa kaçışlar: `"`, `\\`, `\b`, `\t`, `\n`, `\f`, `\r`. Diğer U+0000–U+001F karakterleri `\u00xx` biçiminde (küçük hex) yazılır. Geri kalan karakterler ham UTF-8'dir.
 - Eşleşmemiş surrogate ve aynı nesnede yinelenen anahtar hatadır.
+- İç içe nesne ve dizi derinliği en fazla 64'tür; daha derin değer hatadır.
 
 **Tek yazıcı:**
 
@@ -527,13 +528,21 @@ ardından gelen `\n`'dir. Kayıtta tam olarak şu 16 anahtar bulunur:
 **Karışık zincir:** v1 satırlarından sonra v2 satırları gelebilir. v2 satırından sonra v1 satırı
 gelirse sonuç `VERSION_DOWNGRADE` olur.
 
+**Satırlar:**
+
+- Satırlar yalnız `\n` ile ayrılır. JCS U+0085, U+2028 ve U+2029'u ham yazar. Bu kural v1 satırları için de geçerlidir: eski v1 okuyucusu tek başına `\r`'yi de satır sonu sayıyordu; v1 yazıcısı `\r` üretmediği için fark yalnız elle değiştirilmiş dosyalarda görülür.
+- v2 satırlarında ve checkpoint'lerde sonuç ayrıştırıcının sınırlarına bağlı değildir. Tamsayı literalleri yorumlayıcının basamak sınırından bağımsız okunur. Ayrıştırıcının kendi derinlik sınırını aşan bir değer de aşağıdaki adım sırasıyla değerlendirilir; 64'ten derin iç içelik 5. adımdır. v1 satırlarında yalnız hash'e giren alanlar okunur; derinlik başka bir anahtardaysa sonuç aynıdır. Hash'e giren bir alan ayrıştırıcının derinlik sınırını aşarsa satır `MALFORMED` olur (eski v1 okuyucusu bu durumda hata fırlatıyordu).
+- v2 satırı ve checkpoint satırı, nesnenin JCS baytları ve `\n`'den ibarettir. Aynı içeriğin başka baytlarla yazılışı (anahtar sırası, boşluk, kaçış, `\r`, son satırda eksik `\n`) v2 satırında `MALFORMED` (5. adım), checkpoint'te `CHECKPOINT_MALFORMED` olur.
+- `v` anahtarı olmayan satır v1 satırıdır ve v1 `AuditLog.verify()` kurallarıyla doğrulanır. İlk v2 satırından önceki boş satırlar atlanır. `seq` satırları değil kayıtları sayar.
+- Bir v2 satırından sonra gelen boş satır `INVALID_JSON` olur.
+
 **Doğrulama sırası.** v2 satırı için sıra şudur:
 
-1. JSON ayrıştırma (`INVALID_JSON`).
+1. JSON ayrıştırma (`INVALID_JSON`). Geçersiz UTF-8, `NaN` ve `Infinity` de bu koddur.
 2. Yinelenen anahtar ya da eksik anahtar (`MALFORMED`).
 3. `v` ≠ 2 (`UNKNOWN_VERSION`).
 4. Fazla anahtar (`UNKNOWN_FIELD`).
-5. Tip ya da değer hatası (`MALFORMED`).
+5. Tip ya da değer hatası (`MALFORMED`). JCS alt kümesi dışındaki değerler (kayan noktalı sayı, sınır dışı tamsayı, eşleşmemiş surrogate, 64'ten derin iç içelik) ve kanonik olmayan satır baytları da bu koddur.
 6. Zaman biçimi (`TIMESTAMP_FORMAT`).
 7. `chain_id` değişti (`CHAIN_ID_MISMATCH`).
 8. `seq` ≠ kayıt sırası (`SEQ_MISMATCH`).
@@ -542,7 +551,7 @@ gelirse sonuç `VERSION_DOWNGRADE` olur.
 
 Checkpoint doğrulaması, doğrulayıcıya bir checkpoint dosyası yolu verildiğinde yapılır. Sıra şudur:
 
-1. Verilen dosya yok (`CHECKPOINT_MISSING`).
+1. Verilen dosya yok ya da hiç checkpoint satırı içermiyor (`CHECKPOINT_MISSING`).
 2. Biçim (`CHECKPOINT_MALFORMED`).
 3. `chain_id` (`CHAIN_ID_MISMATCH`).
 4. Bilinmeyen anahtar kimliği (`CHECKPOINT_KEY_UNKNOWN`).
@@ -550,6 +559,14 @@ Checkpoint doğrulaması, doğrulayıcıya bir checkpoint dosyası yolu verildi�
 6. İmza (`CHECKPOINT_SIGNATURE_INVALID`).
 7. `seq` ≥ kayıt sayısı (`CHAIN_TRUNCATED`).
 8. `head_hash` uyuşmuyor (`CHECKPOINT_HEAD_MISMATCH`).
+
+Checkpoint kuralları:
+
+- Her checkpoint'in `head_hash`'i, `seq` konumundaki kaydın `entry_hash`'iyle karşılaştırılır. Son checkpoint'ten sonraki kayıtlar geçerlidir (bilinen sınır).
+- Doğrulayıcı checkpoint dosyasını audit dosyasından önce okur. Yazıcı önce kaydı yazıp `fsync` eder, sonra checkpoint'i ekler; bu sırayla çalışan yazıcının yanında doğrulama yanlış `CHAIN_TRUNCATED` vermez.
+- `seq` azalmaz; aynı `seq` tekrar edebilir. `sig` kanonik base64url'dir: son karakterin dolgu bitleri sıfırdır. Aksi `CHECKPOINT_MALFORMED` olur.
+- Zincirde v2 satırı yoksa bütün checkpoint'lerin `chain_id`'si ilk checkpoint'inkiyle aynı olmalıdır.
+- `broken_at_index`: `CHAIN_TRUNCATED`'da kayıt sayısı, `CHECKPOINT_MISSING`'de `null`, diğer kodlarda checkpoint'in `seq` değeridir. Satırda JCS aralığında (≤ 2^53−1) negatif olmayan tamsayı `seq` yoksa değer `null` olur; satır başka bir nedenle (yinelenen anahtar, `NaN`, aşırı derinlik) bozuk olsa da `seq` okunur.
 
 **Doğrulama sonucu:** `AuditVerificationResult` sona eklenen `reason_code: str | None = None`
 alanını taşır.

@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "suite": "jcs",
+  "cases": [
+    {
+      "id": "jcs-rfc-ordering",
+      "description": "RFC 8785 §3.2.3 UTF-16 key ordering example.",
+      "input_json": "{\"€\": \"Euro Sign\", \"\\r\": \"Carriage Return\", \"דּ\": \"Hebrew Letter Dalet With Dagesh\", \"1\": \"One\", \"😀\": \"Emoji: Grinning Face\", \"\": \"Control\", \"ö\": \"Latin Small Letter O With Diaeresis\"}",
+      "expected_hex": "7b225c72223a2243617272696167652052657475726e222c2231223a224f6e65222c22c280223a22436f6e74726f6c222c22c3b6223a224c6174696e20536d616c6c204c6574746572204f205769746820446961657265736973222c22e282ac223a224575726f205369676e222c22f09f9880223a22456d6f6a693a204772696e6e696e672046616365222c22efacb3223a22486562726577204c65747465722044616c6574205769746820446167657368227d"
+    },
+    {
+      "id": "jcs-control-escape",
+      "description": "Control characters use short escapes or lowercase \\u00xx.",
+      "input_json": "{\"k\": \"\\u0001\\u001f\\b\\t\\n\\f\\r\"}",
+      "expected_hex": "7b226b223a225c75303030315c75303031665c625c745c6e5c665c72227d"
+    },
+    {
+      "id": "jcs-quote-backslash",
+      "description": "Quote and backslash escaping.",
+      "input_json": "{\"k\": \"\\\"\\\\\"}",
+      "expected_hex": "7b226b223a225c225c5c227d"
+    },
+    {
+      "id": "jcs-raw-non-ascii",
+      "description": "U+007F, U+2028 and U+2029 stay raw UTF-8; \\u escapes are decoded.",
+      "input_json": "{\"k\": \"\\u007f\\u2028\\u2029\\u00e9\"}",
+      "expected_hex": "7b226b223a227fe280a8e280a9c3a9227d"
+    },
+    {
+      "id": "jcs-literals",
+      "description": "true/false/null serialization.",
+      "input_json": "{\"c\": null, \"b\": false, \"a\": true}",
+      "expected_hex": "7b2261223a747275652c2262223a66616c73652c2263223a6e756c6c7d"
+    },
+    {
+      "id": "jcs-array-order",
+      "description": "Array order is preserved.",
+      "input_json": "{\"a\": [3, 1, 2]}",
+      "expected_hex": "7b2261223a5b332c312c325d7d"
+    },
+    {
+      "id": "jcs-nested",
+      "description": "Nested objects are ordered at every level.",
+      "input_json": "{\"b\": {\"z\": 1, \"a\": 2}, \"a\": 3}",
+      "expected_hex": "7b2261223a332c2262223a7b2261223a322c227a223a317d7d"
+    },
+    {
+      "id": "jcs-integer-bounds",
+      "description": "Integers up to 2^53-1 in magnitude are written as digits.",
+      "input_json": "{\"max\": 9007199254740991, \"min\": -9007199254740991, \"zero\": 0}",
+      "expected_hex": "7b226d6178223a393030373139393235343734303939312c226d696e223a2d393030373139393235343734303939312c227a65726f223a307d"
+    },
+    {
+      "id": "jcs-error-float",
+      "description": "Floats are unsupported.",
+      "input_json": "{\"x\":1.5}",
+      "expected_error": "UNSUPPORTED_NUMBER"
+    },
+    {
+      "id": "jcs-error-integer-range",
+      "description": "2^53 is outside the integer range.",
+      "input_json": "{\"x\":9007199254740992}",
+      "expected_error": "INTEGER_OUT_OF_RANGE"
+    },
+    {
+      "id": "jcs-error-depth",
+      "description": "More than 64 nested arrays/objects is an error.",
+      "input_json": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+      "expected_error": "NESTING_TOO_DEEP"
+    },
+    {
+      "id": "jcs-error-surrogate",
+      "description": "Lone surrogates are invalid.",
+      "input_json": "{\"x\":\"\\ud800\"}",
+      "expected_error": "LONE_SURROGATE"
+    }
+  ]
+}
