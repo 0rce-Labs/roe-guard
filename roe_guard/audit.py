@@ -100,6 +100,40 @@ def _lock_for_append(fh: TextIO) -> None:
         raise
 
 
+class _OversizedInt:
+    """An integer literal longer than the interpreter converts.
+
+    It is far outside the JCS range (|n| <= 2^53-1), so its value is never
+    needed: it is not an ``int`` for the v2 type checks (``v`` -> step 3,
+    ``seq`` -> step 5), ``canonicalize`` rejects it (step 5), and it prints
+    without converting.
+    """
+
+    __slots__ = ("digits",)
+
+    def __init__(self, token: str) -> None:
+        self.digits = len(token.lstrip("-"))
+
+    def __repr__(self) -> str:
+        return f"<integer with {self.digits} digits>"
+
+
+def _parse_int(token: str) -> int | _OversizedInt:
+    """A JSON integer literal, never a parse error and never slow.
+
+    ``int(str)`` refuses literals longer than the interpreter's digit limit
+    (4300 by default, 640 at the lowest), which would turn an out-of-range
+    integer (SPEC §14.7 step 5) into a parse error (step 1). Converting them
+    anyway is quadratic in the number of digits (the reason for the limit,
+    CVE-2020-10735), so they become ``_OversizedInt`` instead. Within the
+    limit the value is exactly ``int(token)``, as in the original v1 reader.
+    """
+    try:
+        return int(token)
+    except ValueError:
+        return _OversizedInt(token)
+
+
 class AuditLog:
     """Append-only JSONL audit log with SHA-256 hash chaining.
 
@@ -131,7 +165,7 @@ class AuditLog:
                 line = line.strip()
                 if not line:
                     continue
-                payload = json.loads(line)
+                payload = json.loads(line, parse_int=_parse_int)
                 prev = payload["entry_hash"]
         return prev
 
@@ -147,7 +181,7 @@ class AuditLog:
                     continue
                 # Strip like the original v1 reader: a v1 chain it accepts
                 # (e.g. a line ending in \x0c) must not crash here.
-                payload = json.loads(line.strip())
+                payload = json.loads(line.strip(), parse_int=_parse_int)
                 if isinstance(payload, dict) and "v" in payload:
                     raise AuditIntegrityError(
                         "chain contains v2 records; use AuditLogV2"

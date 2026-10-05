@@ -1763,3 +1763,82 @@ def test_lenient_shape_matches_plain_json_loads():
             ok = False
         assert (_shape(text, allow_constants=True).error is None) == ok, text
         assert _shape(text).error is not None, text
+
+
+# --- fifth review pass follow-ups ----------------------------------------------
+
+
+def test_too_deep_checkpoint_minus_zero_seq(tmp_path, monkeypatch):
+    from roe_guard import audit_v2
+
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=2, signer=Ed25519Signer(TEST_PRIVATE))
+    ckpt = Path(str(path) + ".checkpoints.jsonl")
+    text = ckpt.read_bytes().rstrip(b"\n").decode("utf-8")
+    assert text.count('"seq":1') == 1
+    text = text.replace('"seq":1', '"seq":-0')
+    ckpt.write_text(text[:-1] + ',"x":' + DEEP + "}\n")
+    shallow = _verify_with_keys(path)
+    monkeypatch.setattr(audit_v2, "json", _TooDeepJSON(json, 100))
+    deep = _verify_with_keys(path)
+    assert (shallow.reason_code, shallow.broken_at_index) == ("CHECKPOINT_MALFORMED", 0)
+    assert (deep.reason_code, deep.broken_at_index) == ("CHECKPOINT_MALFORMED", 0)
+
+
+@pytest.mark.parametrize("where", ["seq", "v", "metadata"])
+def test_v2_reason_does_not_depend_on_the_digit_limit(tmp_path, where):
+    if not hasattr(sys, "set_int_max_str_digits"):
+        pytest.skip("interpreter has no int/str digit limit")
+    path, line = _one_record_line(tmp_path)
+    digits = "9" * 700
+    if where == "seq":
+        line = line.replace('"seq":0', '"seq":' + digits)
+    elif where == "v":
+        line = line.replace('"v":2', '"v":' + digits)
+    else:
+        line = line.replace('"metadata":{"i":0}', '"metadata":{"i":' + digits + "}")
+    path.write_bytes((line + "\n").encode())
+    old = sys.get_int_max_str_digits()
+    results = []
+    try:
+        for limit in (640, 4300, 0):
+            sys.set_int_max_str_digits(limit)
+            r = verify_chain(path)
+            results.append((r.reason_code, r.broken_at_index, r.reason))
+    finally:
+        sys.set_int_max_str_digits(old)
+    assert results[0] == results[1] == results[2], results
+    assert len(results[0][2]) < 200
+
+
+def test_v1_record_appends_after_a_huge_extra_integer(tmp_path):
+    # verify_chain accepts the chain (extra keys are not hashed); the v1
+    # writer must be able to append to it, not fail with a bare ValueError.
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    line = path.read_text(encoding="utf-8").rstrip("\n")
+    path.write_text(line[:-1] + ',"note":' + "1" * 5000 + "}\n")
+    assert verify_chain(path).valid
+    _v1_record(path, "10.20.3.6")
+    assert verify_chain(path).valid
+
+
+def test_too_deep_v1_extra_key_matches_shallow(tmp_path, monkeypatch):
+    # The v1 hash covers only its known fields; depth in another key does
+    # not change the result.
+    from roe_guard import audit_v2
+
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    line = path.read_text(encoding="utf-8").rstrip("\n")
+    path.write_text(line[:-1] + ',"z":' + DEEP + "}\n")
+    shallow = verify_chain(path)
+    monkeypatch.setattr(audit_v2, "json", _TooDeepJSON(json, 100))
+    deep = verify_chain(path)
+    assert shallow.valid and deep.valid
+    assert (deep.total_entries, deep.reason) == (shallow.total_entries, shallow.reason)
+    # A tampered hashed field is still caught on the deep path.
+    record = json.loads(line)
+    record["target"] = "10.20.3.99"
+    path.write_text(json.dumps(record, sort_keys=True)[:-1] + ',"z":' + DEEP + "}\n")
+    assert verify_chain(path).reason_code == "ENTRY_HASH_MISMATCH"
