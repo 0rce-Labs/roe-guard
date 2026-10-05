@@ -134,6 +134,20 @@ def _parse_int(token: str) -> int | _OversizedInt:
         return _OversizedInt(token)
 
 
+def _load_line(line: str) -> Any:
+    """``json.loads`` of an existing audit line, also when it is very deep.
+
+    verify_chain accepts a v1 line whose depth is only in a key outside the
+    hashed fields, so the v1 writer must be able to read it too.
+    """
+    try:
+        return json.loads(line, parse_int=_parse_int)
+    except RecursionError:
+        from roe_guard.audit_v2 import _read_top_level
+
+        return _read_top_level(line)
+
+
 class AuditLog:
     """Append-only JSONL audit log with SHA-256 hash chaining.
 
@@ -165,8 +179,14 @@ class AuditLog:
                 line = line.strip()
                 if not line:
                     continue
-                payload = json.loads(line, parse_int=_parse_int)
+                payload = _load_line(line)
                 prev = payload["entry_hash"]
+                if not isinstance(
+                    prev, (str, int, float, bool, type(None), list, dict)
+                ):
+                    raise AuditIntegrityError(
+                        "last audit line has an entry_hash that cannot be read"
+                    )
         return prev
 
     def _reject_v2_tail(self) -> None:
@@ -181,7 +201,7 @@ class AuditLog:
                     continue
                 # Strip like the original v1 reader: a v1 chain it accepts
                 # (e.g. a line ending in \x0c) must not crash here.
-                payload = json.loads(line.strip(), parse_int=_parse_int)
+                payload = _load_line(line.strip())
                 if isinstance(payload, dict) and "v" in payload:
                     raise AuditIntegrityError(
                         "chain contains v2 records; use AuditLogV2"

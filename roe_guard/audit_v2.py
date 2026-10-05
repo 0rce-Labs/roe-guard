@@ -260,6 +260,8 @@ class _Shape:
     top_keys: list[str] | None = None  # keys of a top-level object
     # raw text of each top-level value ("{" or "[" for a container; last wins)
     top_tokens: dict[str, str] = field(default_factory=dict)
+    # [start, end) of each top-level container value in the scanned text
+    top_spans: dict[str, tuple[int, int]] = field(default_factory=dict)
 
     @property
     def v_token(self) -> str | None:
@@ -289,6 +291,8 @@ def _shape(text: str, *, allow_constants: bool = False) -> _Shape:
     # value | first_value_or_end | key | first_key_or_end | colon | comma_or_end | done
     expect = "value"
     top_key: str | None = None
+    span_key: str | None = None
+    span_start = 0
     while True:
         while i < n and text[i] in _JSON_WS:
             i += 1
@@ -302,6 +306,9 @@ def _shape(text: str, *, allow_constants: bool = False) -> _Shape:
             if c == "]" and expect == "first_value_or_end":
                 stack.pop()
                 i += 1
+                if len(stack) == 1 and span_key is not None:
+                    shape.top_spans[span_key] = (span_start, i)
+                    span_key = None
                 expect = "comma_or_end" if stack else "done"
                 continue
             at_top = len(stack) == 1 and stack[0] is not None
@@ -313,6 +320,7 @@ def _shape(text: str, *, allow_constants: bool = False) -> _Shape:
                 shape.depth = max(shape.depth, len(stack))
                 if capture is not None:
                     shape.top_tokens[capture] = c
+                    span_key, span_start = capture, i
                 i += 1
                 expect = "first_key_or_end" if c == "{" else "first_value_or_end"
                 continue
@@ -336,6 +344,9 @@ def _shape(text: str, *, allow_constants: bool = False) -> _Shape:
             if c == "}" and expect == "first_key_or_end":
                 stack.pop()
                 i += 1
+                if len(stack) == 1 and span_key is not None:
+                    shape.top_spans[span_key] = (span_start, i)
+                    span_key = None
                 expect = "comma_or_end" if stack else "done"
                 continue
             m = _JSON_STRING_RE.match(text, i) if c == '"' else None
@@ -373,6 +384,9 @@ def _shape(text: str, *, allow_constants: bool = False) -> _Shape:
         if c == ("}" if is_object else "]"):
             stack.pop()
             i += 1
+            if len(stack) == 1 and span_key is not None:
+                shape.top_spans[span_key] = (span_start, i)
+                span_key = None
             expect = "comma_or_end" if stack else "done"
             continue
         shape.error = f"expected ',' or a closing bracket at char {i}"
@@ -602,21 +616,60 @@ def _v2_field_problem(record: dict[str, Any]) -> str | None:
     return None
 
 
-def _deep_v1_payload(routed: _Shape) -> dict[str, Any] | None:
+class _TooDeep:
+    """A top-level value nested deeper than ``json.loads`` can parse."""
+
+    def __repr__(self) -> str:
+        return "<nested too deeply>"
+
+
+_TOO_DEEP = _TooDeep()
+
+
+def _top_level_members(text: str, shape: _Shape) -> dict[str, Any]:
+    """The top-level members of a scanned JSON object (last duplicate wins).
+
+    Scalars are decoded from their tokens; a container is parsed on its own
+    span, so only a value that is itself too deep becomes ``_TOO_DEEP``.
+    """
+    assert shape.error is None and shape.top_keys is not None
+    members: dict[str, Any] = {}
+    for key in shape.top_keys:
+        token = shape.top_tokens[key]
+        if token in ("{", "["):
+            start, end = shape.top_spans[key]
+            try:
+                members[key] = json.loads(text[start:end], parse_int=_parse_int)
+            except RecursionError:
+                members[key] = _TOO_DEEP
+        else:
+            members[key] = json.loads(token, parse_int=_parse_int)
+    return members
+
+
+def _read_top_level(text: str) -> dict[str, Any]:
+    """A JSON object line too deep for ``json.loads`` (used by the v1 writer).
+
+    Raises:
+        ValueError: *text* is not a JSON object (as ``json.loads`` would).
+    """
+    shape = _shape(text, allow_constants=True)
+    if shape.error is not None or shape.top_keys is None:
+        raise ValueError(f"invalid JSON object: {shape.error or 'not an object'}")
+    return _top_level_members(text, shape)
+
+
+def _deep_v1_payload(text: str, routed: _Shape) -> dict[str, Any] | None:
     """The hashed v1 fields of a too-deep v1 line, or None.
 
     The v1 hash covers only the fields in ``_V1_FIELDS``. When the depth is
     elsewhere (e.g. an extra key), the line is judged exactly as a parseable
     one would be. When a hashed field itself is too deep, None.
     """
-    payload: dict[str, Any] = {}
-    for name in _V1_FIELDS:
-        token = routed.top_tokens.get(name)
-        if token is None:
-            continue
-        if token in ("{", "["):
-            return None
-        payload[name] = json.loads(token, parse_int=_parse_int)
+    members = _top_level_members(text, routed)
+    payload = {k: v for k, v in members.items() if k in _V1_FIELDS}
+    if any(v is _TOO_DEEP for v in payload.values()):
+        return None
     return payload
 
 
@@ -700,7 +753,7 @@ def _scan_lines(data: bytes) -> _ChainState:
                 and routed.top_keys is not None
                 and "v" not in routed.top_keys
             ):
-                rebuilt = _deep_v1_payload(routed)
+                rebuilt = _deep_v1_payload(text.strip(), routed)
             if rebuilt is None:
                 deep_code, deep_detail = _deep_line_code(text, seen_v2, routed)
                 state.result = _fail(

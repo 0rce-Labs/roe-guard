@@ -1842,3 +1842,61 @@ def test_too_deep_v1_extra_key_matches_shallow(tmp_path, monkeypatch):
     record["target"] = "10.20.3.99"
     path.write_text(json.dumps(record, sort_keys=True)[:-1] + ',"z":' + DEEP + "}\n")
     assert verify_chain(path).reason_code == "ENTRY_HASH_MISMATCH"
+
+
+# --- sixth review pass follow-ups ----------------------------------------------
+
+REAL_DEEP = "[" * 300000 + "]" * 300000  # deeper than any CPython parser limit
+
+
+def test_v1_record_appends_after_a_too_deep_extra_key(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    line = path.read_text(encoding="utf-8").rstrip("\n")
+    path.write_text(line[:-1] + ',"note":' + REAL_DEEP + "}\n")
+    assert verify_chain(path).valid
+    _v1_record(path, "10.20.3.6")
+    result = verify_chain(path)
+    assert (result.valid, result.total_entries) == (True, 2)
+
+
+def test_v1_record_refuses_a_too_deep_v2_line(tmp_path):
+    path, line = _one_record_line(tmp_path)
+    path.write_bytes((line[:-1] + ',"z":' + REAL_DEEP + "}\n").encode())
+    with pytest.raises(AuditIntegrityError):
+        _v1_record(path, "10.20.3.6")
+
+
+def test_too_deep_v1_line_with_shallow_container_field(tmp_path, monkeypatch):
+    # A hashed field may hold a shallow container (the original hashed it);
+    # depth elsewhere must not turn the valid line into MALFORMED.
+    from roe_guard import audit_v2
+    from roe_guard.audit import _hash_entry
+    from roe_guard.models import AuditEntry, DecisionType
+
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["target"] = ["a"]
+    entry = AuditEntry(
+        engagement_id=record.get("engagement_id", ""),
+        timestamp=datetime.fromisoformat(record["timestamp"]),
+        target=record["target"],
+        action_type=record["action_type"],
+        decision=DecisionType(record["decision"]),
+        reason=record.get("reason", ""),
+        prev_hash=record["prev_hash"],
+        entry_hash="",
+    )
+    record["entry_hash"] = _hash_entry(entry)
+    text = json.dumps(record, sort_keys=True)
+    path.write_text(text + "\n")
+    assert verify_chain(path).valid
+    path.write_text(text[:-1] + ',"x":' + DEEP + "}\n")
+    monkeypatch.setattr(audit_v2, "json", _TooDeepJSON(json, 100))
+    assert verify_chain(path).valid
+    # The same field written too deep is MALFORMED (the original raised).
+    deep_target = text.replace('"target": ["a"]', '"target": ' + DEEP)
+    assert deep_target != text
+    path.write_text(deep_target + "\n")
+    assert verify_chain(path).reason_code == "MALFORMED"
