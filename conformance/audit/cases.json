@@ -750,6 +750,26 @@
       }
     },
     {
+      "id": "v2-checkpoint-seq-outside-jcs-range",
+      "description": "A checkpoint seq of 2^53 is outside the JCS range: CHECKPOINT_MALFORMED with broken_at_index null.",
+      "chain": [
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"metadata\":{\"i\":0},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":0,\"target\":\"10.20.3.5\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"metadata\":{\"i\":1},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"0e1fa1a21a614b53b74b538c9e8a3f3bc55cae002234d7503deb57cecc480f26\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":1,\"target\":\"10.20.3.6\",\"timestamp\":\"2026-10-01T10:00:01.000000Z\",\"v\":2}",
+        "{\"action_type\":\"recon\",\"agent_id\":\"spiffe://example.org/agent/a1\",\"chain_id\":\"conformance-chain\",\"decision\":\"ALLOW\",\"engagement_id\":\"conf-eng\",\"entry_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"metadata\":{\"i\":2},\"mode\":\"enforce\",\"policy_sha256\":\"40c9440203109b7d401ed4ae6d6f47433f8351e7ca65d3bfd8c215b4db80cec2\",\"prev_hash\":\"b7d66fa889415d2447c1c15ee885230e3f248a5964e7e9c2344daaf12c62b51d\",\"reason\":\"action type 'recon' allowed\",\"reason_code\":\"ACTION_ALLOWED\",\"seq\":2,\"target\":\"10.20.3.7\",\"timestamp\":\"2026-10-01T10:00:02.000000Z\",\"v\":2}"
+      ],
+      "checkpoints": [
+        "{\"chain_id\":\"conformance-chain\",\"head_hash\":\"22477caf7b7fba412a865aa9fed1ef41034fb13377711257d043df559be850cf\",\"key_id\":\"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9\",\"seq\":9007199254740992,\"sig\":\"l5HGqLDPmh00rbVGAy2qDt_63DKR4Gt8pK1eI74FYHGazjSKfP6bsg1vsmBI5-i-1YfDYZczn3tvguEO8kidBg\",\"timestamp\":\"2026-10-01T10:00:00.000000Z\",\"v\":2}"
+      ],
+      "public_keys": {
+        "sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      },
+      "expected": {
+        "valid": false,
+        "broken_at_index": null,
+        "reason_code": "CHECKPOINT_MALFORMED"
+      }
+    },
+    {
       "id": "v2-version-big-integer",
       "description": "A 5001-digit v is an integer that is not 2: UNKNOWN_VERSION (step 3), never a parser error.",
       "chain": [

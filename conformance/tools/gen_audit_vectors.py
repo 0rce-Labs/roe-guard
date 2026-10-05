@@ -704,6 +704,20 @@ def build_cases() -> dict:
         public_keys,
     )
 
+    add(
+        "v2-checkpoint-seq-outside-jcs-range",
+        "A checkpoint seq of 2^53 is outside the JCS range: CHECKPOINT_MALFORMED "
+        "with broken_at_index null.",
+        lines(valid),
+        ("CHECKPOINT_MALFORMED", None),
+        [
+            json.dumps(
+                dict(checkpoint, seq=2**53), sort_keys=True, separators=(",", ":")
+            )
+        ],
+        public_keys,
+    )
+
     # --- parser limits must not change the result (SPEC 14.7, "Satırlar") ---
     base_line = lines(valid)[0]
     meta = '"metadata":{"i":0}'

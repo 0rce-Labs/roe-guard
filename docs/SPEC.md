@@ -566,7 +566,7 @@ Checkpoint kuralları:
 - Doğrulayıcı checkpoint dosyasını audit dosyasından önce okur. Yazıcı önce kaydı yazıp `fsync` eder, sonra checkpoint'i ekler; bu sırayla çalışan yazıcının yanında doğrulama yanlış `CHAIN_TRUNCATED` vermez.
 - `seq` azalmaz; aynı `seq` tekrar edebilir. `sig` kanonik base64url'dir: son karakterin dolgu bitleri sıfırdır. Aksi `CHECKPOINT_MALFORMED` olur.
 - Zincirde v2 satırı yoksa bütün checkpoint'lerin `chain_id`'si ilk checkpoint'inkiyle aynı olmalıdır.
-- `broken_at_index`: `CHAIN_TRUNCATED`'da kayıt sayısı, `CHECKPOINT_MISSING`'de `null`, diğer kodlarda checkpoint'in `seq` değeridir. Satırda negatif olmayan tamsayı `seq` yoksa değer `null` olur.
+- `broken_at_index`: `CHAIN_TRUNCATED`'da kayıt sayısı, `CHECKPOINT_MISSING`'de `null`, diğer kodlarda checkpoint'in `seq` değeridir. Satırda JCS aralığında (≤ 2^53−1) negatif olmayan tamsayı `seq` yoksa değer `null` olur; satır başka bir nedenle (yinelenen anahtar, `NaN`, aşırı derinlik) bozuk olsa da `seq` okunur.
 
 **Doğrulama sonucu:** `AuditVerificationResult` sona eklenen `reason_code: str | None = None`
 alanını taşır.

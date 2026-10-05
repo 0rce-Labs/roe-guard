@@ -9,7 +9,6 @@ Verification handles mixed v1→v2 chains; v1 lines keep the v1 rules.
 from __future__ import annotations
 
 import base64
-import decimal
 import errno
 import hashlib
 import importlib
@@ -197,25 +196,56 @@ def _v1_head(value: object) -> str:
     """
     try:
         return f"{value[:12]}"  # type: ignore[index]
-    except (TypeError, KeyError, RecursionError):
+    except (TypeError, KeyError, RecursionError, ValueError):
         try:
             return str(value)[:12]
         except (RecursionError, ValueError):
             return "<unprintable>"
 
 
-def _parse_int(token: str) -> int:
-    """A JSON integer literal as ``int``, whatever ``PYTHONINTMAXSTRDIGITS`` is.
+class _OversizedInt:
+    """An integer literal longer than the interpreter converts.
+
+    It is far outside the JCS range (|n| <= 2^53-1), so its value is never
+    needed: it is not an ``int`` for the v2 type checks (``v`` -> step 3,
+    ``seq`` -> step 5), ``canonicalize`` rejects it (step 5), and it prints
+    without converting.
+    """
+
+    __slots__ = ("digits",)
+
+    def __init__(self, token: str) -> None:
+        self.digits = len(token.lstrip("-"))
+
+    def __repr__(self) -> str:
+        return f"<integer with {self.digits} digits>"
+
+
+def _parse_int(token: str) -> int | _OversizedInt:
+    """A JSON integer literal, never a parse error and never slow.
 
     ``int(str)`` refuses literals longer than the interpreter's digit limit
     (4300 by default, 640 at the lowest), which would turn an out-of-range
-    integer (SPEC §14.7 step 5) into a parse error (step 1). Decimal does
-    not go through that conversion. Values outside the JCS range are then
-    rejected by ``canonicalize`` at step 5.
+    integer (SPEC §14.7 step 5) into a parse error (step 1). Converting them
+    anyway is quadratic in the number of digits (the reason for the limit,
+    CVE-2020-10735), so they become ``_OversizedInt`` instead. Within the
+    limit the value is exactly ``int(token)``, as in the original v1 reader.
     """
-    if len(token) <= 18:
+    try:
         return int(token)
-    return int(decimal.Decimal(token))
+    except ValueError:
+        return _OversizedInt(token)
+
+
+def _jcs_index(value: Any) -> int | None:
+    """A checkpoint ``seq`` usable as ``broken_at_index`` (SPEC §14.7).
+
+    Only a non-negative integer inside the JCS range counts, so the result
+    is the same under any digit limit and always printable.
+    """
+    if _is_int(value) and 0 <= value <= _MAX_JCS_INT:
+        return int(value)
+    return None
 
 
 _JSON_WS = frozenset(" \t\n\r")
@@ -224,6 +254,8 @@ _JSON_STRING_RE = re.compile(
 )
 _JSON_NUMBER_RE = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
 _JSON_LITERAL_RE = re.compile(r"true|false|null")
+_JSON_CONSTANT_RE = re.compile(r"NaN|Infinity|-Infinity")
+_MAX_JCS_INT = 2**53 - 1
 
 
 @dataclass
@@ -235,10 +267,14 @@ class _Shape:
     depth: int = 0  # deepest object/array nesting
     top_keys: list[str] | None = None  # keys of a top-level object
     v_token: str | None = None  # raw text of the top-level "v" value
+    seq_token: str | None = None  # raw text of the top-level "seq" value
 
 
-def _shape(text: str) -> _Shape:
+def _shape(text: str, *, allow_constants: bool = False) -> _Shape:
     """Validate *text* as JSON without recursion.
+
+    *allow_constants* accepts NaN/Infinity/-Infinity like a plain
+    ``json.loads`` (the v1 routing parse and the lenient checkpoint read).
 
     Used only when ``json.loads`` raised RecursionError: a value nested
     deeper than the interpreter can parse must still get the SPEC §14.7
@@ -268,14 +304,17 @@ def _shape(text: str) -> _Shape:
                 i += 1
                 expect = "comma_or_end" if stack else "done"
                 continue
-            capture_v = len(stack) == 1 and stack[0] is not None and top_key == "v"
+            at_top = len(stack) == 1 and stack[0] is not None
+            capture = top_key if at_top and top_key in ("v", "seq") else None
             if c in "{[":
                 stack.append(set() if c == "{" else None)
                 if len(stack) == 1 and c == "{":
                     shape.top_keys = []
                 shape.depth = max(shape.depth, len(stack))
-                if capture_v:
+                if capture == "v":
                     shape.v_token = c
+                elif capture == "seq":
+                    shape.seq_token = c
                 i += 1
                 expect = "first_key_or_end" if c == "{" else "first_value_or_end"
                 continue
@@ -285,11 +324,15 @@ def _shape(text: str) -> _Shape:
                 m = _JSON_LITERAL_RE.match(text, i)
             else:
                 m = _JSON_NUMBER_RE.match(text, i)
+                if m is None and allow_constants:
+                    m = _JSON_CONSTANT_RE.match(text, i)
             if m is None:
                 shape.error = f"invalid value at char {i}"
                 return shape
-            if capture_v:
+            if capture == "v":
                 shape.v_token = m.group()
+            elif capture == "seq":
+                shape.seq_token = m.group()
             i = m.end()
             expect = "comma_or_end" if stack else "done"
             continue
@@ -371,12 +414,20 @@ def _lenient_seq(text: str) -> int | None:
     """
     try:
         value = json.loads(text, parse_int=_parse_int)
-    except (ValueError, RecursionError):
+    except ValueError:
         return None
+    except RecursionError:
+        # Same answer for a line too deep for the parser (last "seq" wins,
+        # as in json.loads).
+        shape = _shape(text, allow_constants=True)
+        if shape.error is not None or shape.top_keys is None or shape.seq_token is None:
+            return None
+        token = shape.seq_token
+        if not re.fullmatch(r"0|[1-9][0-9]{0,15}", token):
+            return None
+        return _jcs_index(int(token))
     if isinstance(value, dict):
-        seq: Any = value.get("seq")
-        if _is_int(seq) and seq >= 0:
-            return int(seq)
+        return _jcs_index(value.get("seq"))
     return None
 
 
@@ -557,7 +608,8 @@ def _v2_field_problem(record: dict[str, Any]) -> str | None:
 
 def _deep_line_code(text: str, seen_v2: bool) -> tuple[AuditReasonCode, str]:
     """Route and judge a line ``json.loads`` could not parse for depth."""
-    routed = _shape(text.strip())
+    # Before any v2 line the routing parse accepts NaN, like json.loads.
+    routed = _shape(text.strip(), allow_constants=not seen_v2)
     if (
         routed.error is None
         and routed.top_keys is not None
@@ -771,7 +823,7 @@ def _verify_checkpoints(
         if not isinstance(checkpoint, dict):
             return (_RC.CHECKPOINT_MALFORMED, None)
         seq: Any = checkpoint.get("seq")
-        at: int | None = seq if _is_int(seq) and seq >= 0 else None
+        at = _jcs_index(seq)
         if (
             set(checkpoint) != set(CHECKPOINT_KEYS)
             or not _is_int(checkpoint["v"])

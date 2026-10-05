@@ -1190,9 +1190,10 @@ def test_checkpoint_seq_outside_jcs_range_is_malformed(tmp_path):
         json.dumps(checkpoint, sort_keys=True, separators=(",", ":")) + "\n"
     )
     result = _verify_with_keys(path)
+    # SPEC 14.7: a seq outside the JCS range gives no index (always printable).
     assert (result.reason_code, result.broken_at_index) == (
         "CHECKPOINT_MALFORMED",
-        2**53,
+        None,
     )
     with pytest.raises(AuditIntegrityError):
         AuditLogV2(path, chain_id="test-chain")
@@ -1383,9 +1384,7 @@ def test_big_integer_literals_follow_spec_order(
     assert detail in result.reason
 
 
-def test_checkpoint_big_integer_seq_keeps_its_index(tmp_path, low_int_digit_limit):
-    import decimal
-
+def test_checkpoint_big_integer_seq_has_no_index(tmp_path, low_int_digit_limit):
     path = tmp_path / "audit.jsonl"
     _write(path, count=2, signer=Ed25519Signer(TEST_PRIVATE))
     ckpt = Path(str(path) + ".checkpoints.jsonl")
@@ -1393,8 +1392,11 @@ def test_checkpoint_big_integer_seq_keeps_its_index(tmp_path, low_int_digit_limi
     assert text.count('"seq":1') == 1
     ckpt.write_text(text.replace('"seq":1', '"seq":' + BIG_INT) + "\n")
     result = _verify_with_keys(path)
-    assert result.reason_code == "CHECKPOINT_MALFORMED"
-    assert result.broken_at_index == int(decimal.Decimal(BIG_INT))
+    assert (result.reason_code, result.broken_at_index) == (
+        "CHECKPOINT_MALFORMED",
+        None,
+    )
+    repr(result)  # printable under any digit limit
 
 
 @pytest.mark.parametrize("extra", [',"v":2}', ',"x":NaN}'])
@@ -1643,3 +1645,121 @@ def test_shape_matches_the_json_parser():
         assert (shape.error is None) == ok, (text, shape)
         if ok:
             assert (shape.duplicate is not None) == dup, (text, shape)
+
+
+# --- fourth review pass follow-ups ---------------------------------------------
+
+
+@pytest.mark.parametrize("field_name", ["entry_hash", "prev_hash", "target"])
+@pytest.mark.parametrize("limit", [None, 640])
+def test_v1_big_integer_field_never_crashes(tmp_path, monkeypatch, field_name, limit):
+    if limit is not None:
+        if not hasattr(sys, "set_int_max_str_digits"):
+            pytest.skip("interpreter has no int/str digit limit")
+        old = sys.get_int_max_str_digits()
+        sys.set_int_max_str_digits(limit)
+        monkeypatch.setattr(sys, "_rg_restore_digits", old, raising=False)
+    try:
+        path = tmp_path / "audit.jsonl"
+        _v1_record(path, "10.20.3.5")
+        record = json.loads(path.read_text(encoding="utf-8"))
+        text = json.dumps(record, sort_keys=True, separators=(",", ":"))
+        old_value = f'"{field_name}":' + json.dumps(record[field_name])
+        assert old_value in text
+        path.write_text(
+            text.replace(old_value, f'"{field_name}":[' + "9" * 5000 + "]") + "\n"
+        )
+        result = AuditLog(path).verify()
+        assert result.valid is False
+        repr(result)
+        with pytest.raises(AuditIntegrityError):
+            AuditLogV2(path, chain_id="test-chain")
+    finally:
+        if limit is not None:
+            sys.set_int_max_str_digits(old)
+
+
+def test_huge_integer_literal_is_not_converted():
+    # Converting a huge literal is quadratic (CVE-2020-10735); it must not be.
+    import time
+
+    from roe_guard.audit_v2 import _OversizedInt, _parse_int
+
+    start = time.perf_counter()
+    value = _parse_int("9" * 1_000_000)
+    assert isinstance(value, _OversizedInt)
+    assert repr(value) == "<integer with 1000000 digits>"
+    assert time.perf_counter() - start < 1.0
+
+
+def test_line_with_million_digit_integer_is_fast(tmp_path):
+    import time
+
+    path, line = _one_record_line(tmp_path)
+    path.write_bytes((line.replace('"v":2', '"v":' + "9" * 1_000_000) + "\n").encode())
+    start = time.perf_counter()
+    assert verify_chain(path).reason_code == "UNKNOWN_VERSION"
+    assert time.perf_counter() - start < 10.0
+
+
+def test_too_deep_checkpoint_keeps_its_index(tmp_path, monkeypatch):
+    from roe_guard import audit_v2
+
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=2, signer=Ed25519Signer(TEST_PRIVATE))
+    ckpt = Path(str(path) + ".checkpoints.jsonl")
+    text = ckpt.read_bytes().rstrip(b"\n").decode("utf-8")
+    assert '"chain_id":"test-chain"' in text
+    ckpt.write_text(
+        text.replace('"chain_id":"test-chain"', '"chain_id":' + DEEP) + "\n"
+    )
+    shallow = _verify_with_keys(path)
+    monkeypatch.setattr(audit_v2, "json", _TooDeepJSON(json, 100))
+    deep = _verify_with_keys(path)
+    assert (deep.reason_code, deep.broken_at_index) == ("CHECKPOINT_MALFORMED", 1)
+    assert (shallow.reason_code, shallow.broken_at_index) == (
+        deep.reason_code,
+        deep.broken_at_index,
+    )
+
+
+def test_too_deep_v1_line_with_nan_matches_deep_without(tmp_path, monkeypatch):
+    # Before any v2 line the routing parse accepts NaN, so a too-deep v1 line
+    # gets the same code with or without NaN inside (the original reader
+    # raised on both).
+    from roe_guard import audit_v2
+
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    text = json.dumps(record, sort_keys=True, separators=(",", ":"))
+    codes = []
+    monkeypatch.setattr(audit_v2, "json", _TooDeepJSON(json, 100))
+    for inner in ("NaN", "1"):
+        deep = "[" * 199 + inner + "]" * 199
+        path.write_text(text.replace('"target":"10.20.3.5"', '"target":' + deep) + "\n")
+        codes.append(verify_chain(path).reason_code)
+    assert codes == ["MALFORMED", "MALFORMED"]
+
+
+def test_lenient_shape_matches_plain_json_loads():
+    from roe_guard.audit_v2 import _shape
+
+    for text in [
+        "NaN",
+        "[NaN]",
+        '{"a":Infinity}',
+        "-Infinity",
+        "[-Infinity,1]",
+        "Nan",
+        "-NaN",
+        "+Infinity",
+        "infinity",
+    ]:
+        try:
+            json.loads(text)
+            ok = True
+        except ValueError:
+            ok = False
+        assert (_shape(text, allow_constants=True).error is None) == ok, text
+        assert _shape(text).error is not None, text
