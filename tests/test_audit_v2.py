@@ -1900,3 +1900,17 @@ def test_too_deep_v1_line_with_shallow_container_field(tmp_path, monkeypatch):
     assert deep_target != text
     path.write_text(deep_target + "\n")
     assert verify_chain(path).reason_code == "MALFORMED"
+
+
+def test_v1_writer_splits_lines_like_the_verifier(tmp_path):
+    # SPEC 14.7: lines are separated only by "\n". A v1 line whose JSON uses
+    # a bare "\r" as whitespace is one line for the verifier and the writer.
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        fh.write(json.dumps(record, sort_keys=True, separators=(",\r", ":")) + "\n")
+    assert verify_chain(path).valid
+    _v1_record(path, "10.20.3.6")
+    result = verify_chain(path)
+    assert (result.valid, result.total_entries) == (True, 2)

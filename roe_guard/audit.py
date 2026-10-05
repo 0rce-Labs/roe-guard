@@ -174,7 +174,7 @@ class AuditLog:
     def _last_entry_hash(self) -> str:
         """Return the ``entry_hash`` of the last line, or genesis."""
         prev = GENESIS_PREV_HASH
-        with self.path.open("r", encoding="utf-8") as fh:
+        with self.path.open("r", encoding="utf-8", newline="\n") as fh:
             for line in fh:
                 line = line.strip()
                 if not line:
@@ -195,7 +195,7 @@ class AuditLog:
         SPEC §14.7: a v1 line after a v2 line is a version downgrade, so
         the v1 writer never produces one.
         """
-        with self.path.open("r", encoding="utf-8") as fh:
+        with self.path.open("r", encoding="utf-8", newline="\n") as fh:
             for line in fh:
                 if not line.strip():
                     continue
