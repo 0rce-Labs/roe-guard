@@ -530,7 +530,8 @@ gelirse sonuç `VERSION_DOWNGRADE` olur.
 
 **Satırlar:**
 
-- Satırlar yalnız `\n` ile ayrılır. JCS U+0085, U+2028 ve U+2029'u ham yazar.
+- Satırlar yalnız `\n` ile ayrılır. JCS U+0085, U+2028 ve U+2029'u ham yazar. Bu kural v1 satırları için de geçerlidir: eski v1 okuyucusu tek başına `\r`'yi de satır sonu sayıyordu; v1 yazıcısı `\r` üretmediği için fark yalnız elle değiştirilmiş dosyalarda görülür.
+- Sonuç ayrıştırıcının sınırlarına bağlı değildir. Tamsayı literalleri yorumlayıcının basamak sınırından bağımsız okunur. Ayrıştırıcının kendi derinlik sınırını aşan bir değer de aşağıdaki adım sırasıyla değerlendirilir; 64'ten derin iç içelik 5. adımdır.
 - v2 satırı ve checkpoint satırı, nesnenin JCS baytları ve `\n`'den ibarettir. Aynı içeriğin başka baytlarla yazılışı (anahtar sırası, boşluk, kaçış, `\r`, son satırda eksik `\n`) v2 satırında `MALFORMED` (5. adım), checkpoint'te `CHECKPOINT_MALFORMED` olur.
 - `v` anahtarı olmayan satır v1 satırıdır ve v1 `AuditLog.verify()` kurallarıyla doğrulanır. İlk v2 satırından önceki boş satırlar atlanır. `seq` satırları değil kayıtları sayar.
 - Bir v2 satırından sonra gelen boş satır `INVALID_JSON` olur.

@@ -1264,16 +1264,20 @@ def test_v1_prev_hash_checked_before_hashing(tmp_path):
 
 
 def test_v1_list_prev_hash_text_matches_original(tmp_path):
-    # The original wrote prev_hash[:12]; for a list that is the list slice.
+    # The original wrote f"{prev_hash[:12]}": slice the list, then format it.
+    # A 20-item list tells that apart from formatting first (str(x)[:12]).
     path = tmp_path / "audit.jsonl"
     _v1_record(path, "10.20.3.5")
     record = json.loads(path.read_text(encoding="utf-8"))
-    record["prev_hash"] = ["a", "b"]
+    items = [str(i) for i in range(20)]
+    record["prev_hash"] = items
     path.write_text(json.dumps(record, sort_keys=True) + "\n")
     result = verify_chain(path)
     assert result.reason == (
-        "line 0: prev_hash mismatch (expected 000000000000…, got ['a', 'b']…)"
+        f"line 0: prev_hash mismatch (expected 000000000000…, got {items[:12]}…)"
     )
+    # Guard the guard: the two spellings differ for this input.
+    assert f"{items[:12]}" != str(items)[:12]
 
 
 def test_failed_checkpoint_append_closes_the_writer(tmp_path, monkeypatch):
@@ -1325,3 +1329,317 @@ def test_v1_record_accepts_lines_the_v1_reader_accepts(tmp_path):
     assert AuditLog(path).verify().valid
     _v1_record(path, "10.20.3.6")
     assert AuditLog(path).verify().valid
+
+
+# --- third review pass follow-ups ----------------------------------------------
+
+BIG_INT = "1" + "0" * 5000
+
+
+@pytest.fixture
+def low_int_digit_limit():
+    # The result must not depend on PYTHONINTMAXSTRDIGITS (640 is its minimum).
+    if not hasattr(sys, "set_int_max_str_digits"):
+        yield
+        return
+    old = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(640)
+    try:
+        yield
+    finally:
+        sys.set_int_max_str_digits(old)
+
+
+def _one_record_line(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=1)
+    line = path.read_bytes().rstrip(b"\n").decode("utf-8")
+    assert line.count('"v":2') == 1
+    assert '"metadata":{"i":0}' in line
+    assert '"mode":"enforce",' in line
+    return path, line
+
+
+@pytest.mark.parametrize(
+    ("version", "drop_mode", "code", "detail"),
+    [
+        ("3", False, "UNKNOWN_VERSION", "v = 3"),
+        ("2", False, "MALFORMED", "outside the JCS subset"),
+        ("2", True, "MALFORMED", "missing keys"),
+        (BIG_INT, False, "UNKNOWN_VERSION", "v = "),
+    ],
+)
+def test_big_integer_literals_follow_spec_order(
+    tmp_path, low_int_digit_limit, version, drop_mode, code, detail
+):
+    path, line = _one_record_line(tmp_path)
+    line = line.replace('"metadata":{"i":0}', '"metadata":{"i":' + BIG_INT + "}")
+    line = line.replace('"v":2', '"v":' + version)
+    if drop_mode:
+        line = line.replace('"mode":"enforce",', "")
+    path.write_bytes((line + "\n").encode("utf-8"))
+    result = verify_chain(path)
+    assert (result.valid, result.reason_code) == (False, code)
+    assert detail in result.reason
+
+
+def test_checkpoint_big_integer_seq_keeps_its_index(tmp_path, low_int_digit_limit):
+    import decimal
+
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=2, signer=Ed25519Signer(TEST_PRIVATE))
+    ckpt = Path(str(path) + ".checkpoints.jsonl")
+    text = ckpt.read_bytes().rstrip(b"\n").decode("utf-8")
+    assert text.count('"seq":1') == 1
+    ckpt.write_text(text.replace('"seq":1', '"seq":' + BIG_INT) + "\n")
+    result = _verify_with_keys(path)
+    assert result.reason_code == "CHECKPOINT_MALFORMED"
+    assert result.broken_at_index == int(decimal.Decimal(BIG_INT))
+
+
+@pytest.mark.parametrize("extra", [',"v":2}', ',"x":NaN}'])
+def test_checkpoint_parse_problem_keeps_its_index(tmp_path, extra):
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=2, signer=Ed25519Signer(TEST_PRIVATE))
+    ckpt = Path(str(path) + ".checkpoints.jsonl")
+    text = ckpt.read_bytes().rstrip(b"\n").decode("utf-8")
+    ckpt.write_text(text[:-1] + extra + "\n")
+    result = _verify_with_keys(path)
+    assert (result.reason_code, result.broken_at_index) == ("CHECKPOINT_MALFORMED", 1)
+
+
+@pytest.mark.parametrize("bad", ["NaN", "[NaN]", "-Infinity"])
+def test_nan_line_after_v2_is_invalid_json(tmp_path, bad):
+    path, line = _one_record_line(tmp_path)
+    path.write_bytes((line + "\n" + bad + "\n").encode("utf-8"))
+    result = verify_chain(path)
+    assert (result.reason_code, result.broken_at_index) == ("INVALID_JSON", 1)
+
+
+class _TooDeepJSON:
+    """A ``json`` stand-in whose loads() fails as a too-deep value does.
+
+    CPython's depth limit differs by version (1000 Python frames on 3.10 and
+    3.11, a C limit on 3.12/3.13, the stack on 3.14), so the fallback path
+    is driven deterministically instead.
+    """
+
+    def __init__(self, real, limit):
+        self._real, self._limit = real, limit
+
+    def loads(self, text, *args, **kwargs):
+        depth = deepest = 0
+        for ch in text:
+            if ch in "[{":
+                depth += 1
+                deepest = max(deepest, depth)
+            elif ch in "]}":
+                depth -= 1
+        if deepest > self._limit:
+            raise RecursionError("maximum recursion depth exceeded")
+        return self._real.loads(text, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+DEEP = "[" * 200 + "]" * 200
+
+
+@pytest.mark.parametrize(
+    ("mutate", "code"),
+    [
+        (
+            lambda ln: ln.replace(
+                '"metadata":{"i":0}', '"metadata":{"i":' + DEEP + "}"
+            ),
+            "MALFORMED",
+        ),
+        (
+            lambda ln: ln.replace('"v":2', '"v":3').replace(
+                '"metadata":{"i":0}', '"metadata":{"i":' + DEEP + "}"
+            ),
+            "UNKNOWN_VERSION",
+        ),
+        (
+            lambda ln: ln.replace(
+                '"metadata":{"i":0}', '"metadata":{"i":' + DEEP + '},"zz":1'
+            ),
+            "UNKNOWN_FIELD",
+        ),
+        (
+            lambda ln: ln.replace('"mode":"enforce",', "").replace(
+                '"metadata":{"i":0}', '"metadata":{"i":' + DEEP + "}"
+            ),
+            "MALFORMED",
+        ),
+        (
+            lambda ln: ln.replace('"v":2', '"v":3').replace(
+                '"metadata":{"i":0}',
+                '"metadata":{"i":' + "[" * 199 + '{"k":1,"k":2}' + "]" * 199 + "}",
+            ),
+            "MALFORMED",
+        ),
+        (
+            lambda ln: ln.replace(
+                '"metadata":{"i":0}',
+                '"metadata":{"i":' + "[" * 199 + "NaN" + "]" * 199 + "}",
+            ),
+            "INVALID_JSON",
+        ),
+        (
+            lambda ln: (
+                "\x0c"
+                + ln.replace('"metadata":{"i":0}', '"metadata":{"i":' + DEEP + "}")
+            ),
+            "INVALID_JSON",
+        ),
+    ],
+)
+def test_too_deep_v2_line_keeps_spec_order(tmp_path, monkeypatch, mutate, code):
+    from roe_guard import audit_v2
+
+    path, line = _one_record_line(tmp_path)
+    path.write_bytes((mutate(line) + "\n").encode("utf-8"))
+    monkeypatch.setattr(audit_v2, "json", _TooDeepJSON(json, 100))
+    result = verify_chain(path)
+    assert (result.valid, result.reason_code) == (False, code), result.reason
+
+
+def test_too_deep_v1_line(tmp_path, monkeypatch):
+    from roe_guard import audit_v2
+
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    text = json.dumps(record, sort_keys=True, separators=(",", ":"))
+    assert '"target":"10.20.3.5"' in text
+    deep_v1 = text.replace('"target":"10.20.3.5"', '"target":' + DEEP)
+    path.write_text(deep_v1 + "\n")
+    monkeypatch.setattr(audit_v2, "json", _TooDeepJSON(json, 100))
+    assert verify_chain(path).reason_code == "MALFORMED"
+    # After a v2 record the same line is a version downgrade.
+    second = tmp_path / "second"
+    second.mkdir()
+    path2, line = _one_record_line(second)
+    path2.write_bytes((line + "\n" + deep_v1 + "\n").encode("utf-8"))
+    assert verify_chain(path2).reason_code == "VERSION_DOWNGRADE"
+
+
+def test_really_deep_line_never_crashes(tmp_path):
+    # Deeper than any CPython parser limit: no exception, a SPEC code.
+    path, line = _one_record_line(tmp_path)
+    deep = "[" * 300000 + "]" * 300000
+    path.write_bytes(
+        (
+            line.replace('"v":2', '"v":3').replace(
+                '"metadata":{"i":0}', '"metadata":{"i":' + deep + "}"
+            )
+            + "\n"
+        ).encode()
+    )
+    assert verify_chain(path).reason_code == "UNKNOWN_VERSION"
+
+
+def test_v1_hash_recursion_is_malformed(tmp_path, monkeypatch):
+    from roe_guard import audit_v2
+
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+
+    def deep_hash(entry):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(audit_v2, "_hash_entry", deep_hash)
+    result = verify_chain(path)
+    assert (result.reason_code, result.broken_at_index) == ("MALFORMED", 0)
+
+
+def test_scan_recursion_guard_is_malformed(tmp_path, monkeypatch):
+    from roe_guard import audit_v2
+
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=1)
+
+    def too_deep(data):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(audit_v2, "_scan_lines", too_deep)
+    result = verify_chain(path)
+    assert (result.valid, result.reason_code) == (False, "MALFORMED")
+
+
+def test_shape_matches_the_json_parser():
+    # The iterative fallback must accept exactly what CPython's parser
+    # accepts, and see the same duplicate keys (fixed corpus, no RNG).
+    from roe_guard.audit_v2 import (
+        _DuplicateKeyError,
+        _reject_constant,
+        _reject_duplicates,
+        _shape,
+    )
+
+    corpus = [
+        "",
+        " ",
+        "0",
+        "-0",
+        "01",
+        "1.",
+        ".5",
+        "-",
+        "1e5",
+        "1E-2",
+        "true",
+        "tru",
+        "null",
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        '"a"',
+        '"\\u00e9"',
+        '"\\ud800"',
+        '"\\x"',
+        '"\\u12"',
+        '"a\tb"',
+        '"\x01"',
+        '"\\/"',
+        "[]",
+        "[,]",
+        "[1,]",
+        "[1 2]",
+        "{}",
+        "{,}",
+        '{"a":1,}',
+        '{"a" 1}',
+        "{a:1}",
+        '{"a":1,"a":2}',
+        '{"a":{"b":1,"b":2}}',
+        '[{"a":1},{"a":2}]',
+        '{"v":2}',
+        ' \t\n\r{"v":2}\r\n',
+        "\x0c{}",
+        "{}\xa0",
+        "{} x",
+        "[[[[]]]]",
+        "[[[[]]]",
+        '{"a":[1,{"b":null,"c":[true,false]}],"d":"e"}',
+        '{"a":1}{"b":2}',
+        "﻿{}",
+    ]
+    for text in corpus:
+        try:
+            json.loads(text, parse_constant=_reject_constant)
+            ok = True
+        except ValueError:
+            ok = False
+        dup = False
+        if ok:
+            try:
+                json.loads(text, object_pairs_hook=_reject_duplicates)
+            except _DuplicateKeyError:
+                dup = True
+        shape = _shape(text)
+        assert (shape.error is None) == ok, (text, shape)
+        if ok:
+            assert (shape.duplicate is not None) == dup, (text, shape)

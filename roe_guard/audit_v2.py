@@ -9,6 +9,7 @@ Verification handles mixed v1→v2 chains; v1 lines keep the v1 rules.
 from __future__ import annotations
 
 import base64
+import decimal
 import errno
 import hashlib
 import importlib
@@ -165,8 +166,8 @@ def _strict_loads(text: str) -> Any:
         ValueError or RecursionError: step 1 (``json.JSONDecodeError`` and
             ``_StrictJSONError`` are ``ValueError`` subclasses).
     """
-    json.loads(text, parse_constant=_reject_constant)
-    return json.loads(text, object_pairs_hook=_reject_duplicates)
+    json.loads(text, parse_constant=_reject_constant, parse_int=_parse_int)
+    return json.loads(text, object_pairs_hook=_reject_duplicates, parse_int=_parse_int)
 
 
 def _is_canonical(raw: bytes, value: Any) -> bool:
@@ -183,6 +184,8 @@ def _short_repr(value: object, limit: int = 80) -> str:
         text = repr(value)
     except RecursionError:
         return "<nested too deeply>"
+    except ValueError:  # an int longer than the interpreter's digit limit
+        return "<too large to print>"
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -197,8 +200,184 @@ def _v1_head(value: object) -> str:
     except (TypeError, KeyError, RecursionError):
         try:
             return str(value)[:12]
-        except RecursionError:
-            return "<nested>"
+        except (RecursionError, ValueError):
+            return "<unprintable>"
+
+
+def _parse_int(token: str) -> int:
+    """A JSON integer literal as ``int``, whatever ``PYTHONINTMAXSTRDIGITS`` is.
+
+    ``int(str)`` refuses literals longer than the interpreter's digit limit
+    (4300 by default, 640 at the lowest), which would turn an out-of-range
+    integer (SPEC §14.7 step 5) into a parse error (step 1). Decimal does
+    not go through that conversion. Values outside the JCS range are then
+    rejected by ``canonicalize`` at step 5.
+    """
+    if len(token) <= 18:
+        return int(token)
+    return int(decimal.Decimal(token))
+
+
+_JSON_WS = frozenset(" \t\n\r")
+_JSON_STRING_RE = re.compile(
+    r'"(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"'
+)
+_JSON_NUMBER_RE = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
+_JSON_LITERAL_RE = re.compile(r"true|false|null")
+
+
+@dataclass
+class _Shape:
+    """What an iterative scan of one JSON text found; values are not built."""
+
+    error: str | None = None  # step 1: not JSON (NaN/Infinity included)
+    duplicate: str | None = None  # step 2: first duplicated key, any depth
+    depth: int = 0  # deepest object/array nesting
+    top_keys: list[str] | None = None  # keys of a top-level object
+    v_token: str | None = None  # raw text of the top-level "v" value
+
+
+def _shape(text: str) -> _Shape:
+    """Validate *text* as JSON without recursion.
+
+    Used only when ``json.loads`` raised RecursionError: a value nested
+    deeper than the interpreter can parse must still get the SPEC §14.7
+    code of the first failing step, not a parser-dependent one. The grammar
+    is RFC 8259 as CPython's C scanner reads it (ASCII digits, whitespace
+    `` \\t\\n\\r``, no NaN/Infinity, no control characters in strings).
+    """
+    shape = _Shape()
+    n = len(text)
+    i = 0
+    stack: list[set[str] | None] = []  # keys of an object, None for an array
+    # value | first_value_or_end | key | first_key_or_end | colon | comma_or_end | done
+    expect = "value"
+    top_key: str | None = None
+    while True:
+        while i < n and text[i] in _JSON_WS:
+            i += 1
+        if i >= n:
+            break
+        c = text[i]
+        if expect == "done":
+            shape.error = f"extra data at char {i}"
+            return shape
+        if expect in ("value", "first_value_or_end"):
+            if c == "]" and expect == "first_value_or_end":
+                stack.pop()
+                i += 1
+                expect = "comma_or_end" if stack else "done"
+                continue
+            capture_v = len(stack) == 1 and stack[0] is not None and top_key == "v"
+            if c in "{[":
+                stack.append(set() if c == "{" else None)
+                if len(stack) == 1 and c == "{":
+                    shape.top_keys = []
+                shape.depth = max(shape.depth, len(stack))
+                if capture_v:
+                    shape.v_token = c
+                i += 1
+                expect = "first_key_or_end" if c == "{" else "first_value_or_end"
+                continue
+            if c == '"':
+                m = _JSON_STRING_RE.match(text, i)
+            elif c in "tfn":
+                m = _JSON_LITERAL_RE.match(text, i)
+            else:
+                m = _JSON_NUMBER_RE.match(text, i)
+            if m is None:
+                shape.error = f"invalid value at char {i}"
+                return shape
+            if capture_v:
+                shape.v_token = m.group()
+            i = m.end()
+            expect = "comma_or_end" if stack else "done"
+            continue
+        if expect in ("key", "first_key_or_end"):
+            if c == "}" and expect == "first_key_or_end":
+                stack.pop()
+                i += 1
+                expect = "comma_or_end" if stack else "done"
+                continue
+            m = _JSON_STRING_RE.match(text, i) if c == '"' else None
+            if m is None:
+                shape.error = f"expected a key at char {i}"
+                return shape
+            key = json.loads(m.group())
+            keys = stack[-1]
+            assert keys is not None
+            if key in keys:
+                if shape.duplicate is None:
+                    shape.duplicate = key
+            else:
+                keys.add(key)
+                if len(stack) == 1 and shape.top_keys is not None:
+                    shape.top_keys.append(key)
+            if len(stack) == 1:
+                top_key = key
+            i = m.end()
+            expect = "colon"
+            continue
+        if expect == "colon":
+            if c != ":":
+                shape.error = f"expected ':' at char {i}"
+                return shape
+            i += 1
+            expect = "value"
+            continue
+        # expect == "comma_or_end"
+        is_object = stack[-1] is not None
+        if c == ",":
+            i += 1
+            expect = "key" if is_object else "value"
+            continue
+        if c == ("}" if is_object else "]"):
+            stack.pop()
+            i += 1
+            expect = "comma_or_end" if stack else "done"
+            continue
+        shape.error = f"expected ',' or a closing bracket at char {i}"
+        return shape
+    if expect != "done":
+        shape.error = "unexpected end of text"
+    return shape
+
+
+def _v2_code_from_shape(shape: _Shape) -> tuple[AuditReasonCode, str]:
+    """SPEC §14.7 steps 1-5 for a v2 line too deep for ``json.loads``."""
+    if shape.error is not None:
+        return _RC.INVALID_JSON, f"invalid JSON: {shape.error}"
+    if shape.top_keys is None:
+        return _RC.MALFORMED, "malformed entry: not a JSON object"
+    if shape.duplicate is not None:
+        return _RC.MALFORMED, f"duplicate key {_short_repr(shape.duplicate)}"
+    missing = [k for k in V2_KEYS if k not in shape.top_keys]
+    if missing:
+        return _RC.MALFORMED, f"missing keys {missing}"
+    if shape.v_token != "2":
+        return _RC.UNKNOWN_VERSION, "v is not 2"
+    extra = sorted(k for k in shape.top_keys if k not in V2_KEYS)
+    if extra:
+        return _RC.UNKNOWN_FIELD, f"unknown keys {extra}"
+    return _RC.MALFORMED, "value outside the JCS subset: nesting deeper than 64"
+
+
+def _lenient_seq(text: str) -> int | None:
+    """``seq`` of a checkpoint line that failed the strict parse.
+
+    SPEC §14.7: ``broken_at_index`` is the checkpoint's ``seq`` and is null
+    only when the line has no non-negative integer ``seq``; a duplicate key
+    or a NaN elsewhere in the line does not remove it.
+    """
+    try:
+        value = json.loads(text, parse_int=_parse_int)
+    except (ValueError, RecursionError):
+        return None
+    if isinstance(value, dict):
+        seq: Any = value.get("seq")
+        if _is_int(seq) and seq >= 0:
+            return int(seq)
+    return None
 
 
 def _split_lines(data: bytes) -> list[bytes]:
@@ -376,6 +555,24 @@ def _v2_field_problem(record: dict[str, Any]) -> str | None:
     return None
 
 
+def _deep_line_code(text: str, seen_v2: bool) -> tuple[AuditReasonCode, str]:
+    """Route and judge a line ``json.loads`` could not parse for depth."""
+    routed = _shape(text.strip())
+    if (
+        routed.error is None
+        and routed.top_keys is not None
+        and "v" not in routed.top_keys
+    ):
+        # A v1 line too deep to parse (the original v1 reader raised here).
+        if seen_v2:
+            return _RC.VERSION_DOWNGRADE, "v1 record after a v2 record"
+        return _RC.MALFORMED, "malformed entry: nested too deeply"
+    if routed.error is None and routed.top_keys is not None:
+        # A v2 line is judged on its exact bytes (padding is step 1).
+        return _v2_code_from_shape(_shape(text))
+    return _v2_code_from_shape(routed)
+
+
 def _scan_chain(path: Path) -> _ChainState:
     """Verify every line of *path* (SPEC §14.7 order); never raises on content."""
     data = path.read_bytes()
@@ -420,10 +617,20 @@ def _scan_lines(data: bytes) -> _ChainState:
             # v1 rule: blank lines are skipped.
             continue
 
-        # Step 1: JSON. The plain parse keeps the v1 texts byte-identical.
+        # Step 1: JSON. The plain parse keeps the v1 texts byte-identical;
+        # after a v2 line every line is v2, so NaN/Infinity are step 1 there.
+        constants: dict[str, Any] = (
+            {"parse_constant": _reject_constant} if seen_v2 else {}
+        )
         try:
-            payload = json.loads(text.strip())
-        except (ValueError, RecursionError) as exc:
+            payload = json.loads(text.strip(), parse_int=_parse_int, **constants)
+        except RecursionError:
+            deep_code, deep_detail = _deep_line_code(text, seen_v2)
+            state.result = _fail(
+                index, total, f"line {index}: {deep_detail}", deep_code
+            )
+            return state
+        except ValueError as exc:
             state.result = _fail(
                 index, total, f"line {index}: invalid JSON: {exc}", _RC.INVALID_JSON
             )
@@ -461,7 +668,10 @@ def _scan_lines(data: bytes) -> _ChainState:
                 record = _strict_loads(text)
             except _DuplicateKeyError as exc:
                 code, detail, record = _RC.MALFORMED, str(exc), {}
-            except (ValueError, RecursionError) as exc:
+            except RecursionError:
+                code, detail = _v2_code_from_shape(_shape(text))
+                record = {}
+            except ValueError as exc:
                 # Step 1: NaN/Infinity, or bytes that only parsed after the
                 # routing parse's str.strip() (e.g. a leading \x0c or U+00A0,
                 # which are not JSON whitespace).
@@ -551,9 +761,13 @@ def _verify_checkpoints(
     for index, raw in enumerate(segments):
         terminated = data.endswith(b"\n") or index < len(segments) - 1
         try:
-            checkpoint = _strict_loads(raw.decode("utf-8"))
-        except (ValueError, RecursionError):  # UnicodeDecodeError included
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
             return (_RC.CHECKPOINT_MALFORMED, None)
+        try:
+            checkpoint = _strict_loads(text)
+        except (ValueError, RecursionError):
+            return (_RC.CHECKPOINT_MALFORMED, _lenient_seq(text))
         if not isinstance(checkpoint, dict):
             return (_RC.CHECKPOINT_MALFORMED, None)
         seq: Any = checkpoint.get("seq")

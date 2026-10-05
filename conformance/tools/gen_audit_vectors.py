@@ -704,6 +704,42 @@ def build_cases() -> dict:
         public_keys,
     )
 
+    # --- parser limits must not change the result (SPEC 14.7, "Satırlar") ---
+    base_line = lines(valid)[0]
+    meta = '"metadata":{"i":0}'
+    assert base_line.count('"v":2') == 1 and meta in base_line
+    big = "1" + "0" * 5000  # longer than CPython's default int/str limit (4300)
+    nest65 = "[" * 63 + "]" * 63  # record 1 + metadata 1 + 63 arrays = depth 65
+    add(
+        "v2-version-big-integer",
+        "A 5001-digit v is an integer that is not 2: UNKNOWN_VERSION (step 3), "
+        "never a parser error.",
+        [base_line.replace('"v":2', '"v":' + big)],
+        ("UNKNOWN_VERSION", 0),
+    )
+    add(
+        "v2-metadata-big-integer",
+        "A 5001-digit integer in metadata is outside the JCS range: MALFORMED (step 5).",
+        [base_line.replace(meta, '"metadata":{"i":' + big + "}")],
+        ("MALFORMED", 0),
+    )
+    add(
+        "v2-nesting-65",
+        "Nesting one level deeper than 64 is MALFORMED (step 5).",
+        [base_line.replace(meta, '"metadata":{"i":' + nest65 + "}")],
+        ("MALFORMED", 0),
+    )
+    add(
+        "v2-version-3-with-nesting-65",
+        "v = 3 (step 3) wins over nesting deeper than 64 (step 5).",
+        [
+            base_line.replace('"v":2', '"v":3').replace(
+                meta, '"metadata":{"i":' + nest65 + "}"
+            )
+        ],
+        ("UNKNOWN_VERSION", 0),
+    )
+
     return {
         "format": 1,
         "suite": "audit-v2",
