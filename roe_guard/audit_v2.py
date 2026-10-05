@@ -153,10 +153,52 @@ def _reject_constant(name: str) -> Any:
 
 
 def _strict_loads(text: str) -> Any:
-    """Parse *text*; duplicate keys and NaN/Infinity raise _StrictJSONError."""
-    return json.loads(
-        text, object_pairs_hook=_reject_duplicates, parse_constant=_reject_constant
-    )
+    """Parse *text* under the v2 rules.
+
+    SPEC §14.7 step 1 (not JSON, NaN/Infinity, too deep for the parser) wins
+    over step 2 (duplicate key). A single parse would stop at a duplicate key
+    in a nested object before it reached a later NaN, so the text is parsed
+    once without and then once with the duplicate check.
+
+    Raises:
+        _DuplicateKeyError: step 2.
+        ValueError or RecursionError: step 1 (``json.JSONDecodeError`` and
+            ``_StrictJSONError`` are ``ValueError`` subclasses).
+    """
+    json.loads(text, parse_constant=_reject_constant)
+    return json.loads(text, object_pairs_hook=_reject_duplicates)
+
+
+def _is_canonical(raw: bytes, value: Any) -> bool:
+    """``raw == JCS(value)``; a value outside the JCS subset is not canonical."""
+    try:
+        return raw == canonicalize(value)
+    except (TypeError, ValueError, RecursionError):
+        return False
+
+
+def _short_repr(value: object, limit: int = 80) -> str:
+    """``repr`` for messages; never raises on deeply nested or huge values."""
+    try:
+        text = repr(value)
+    except RecursionError:
+        return "<nested too deeply>"
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _v1_head(value: object) -> str:
+    """``f"{value[:12]}"`` as the original v1 texts wrote it; never raises.
+
+    The original sliced whatever the line held (a string or a list); for
+    other types it raised, so any stable text is acceptable there.
+    """
+    try:
+        return f"{value[:12]}"  # type: ignore[index]
+    except (TypeError, KeyError, RecursionError):
+        try:
+            return str(value)[:12]
+        except RecursionError:
+            return "<nested>"
 
 
 def _split_lines(data: bytes) -> list[bytes]:
@@ -250,7 +292,13 @@ def _fail(
 def _check_v1_line(
     payload: dict[str, Any], index: int, expected_prev: str, total: int
 ) -> AuditVerificationResult | None:
-    """The v1 rules of the original ``AuditLog.verify`` (texts included)."""
+    """The v1 rules of the original ``AuditLog.verify``: order and texts.
+
+    The order matters for byte-identical results: build the entry, check
+    ``prev_hash``, then hash. Inputs on which the original raised instead of
+    returning (a TypeError, a RecursionError on deep nesting, a string JSON
+    cannot encode) are reported as MALFORMED.
+    """
     try:
         entry = AuditEntry(
             engagement_id=payload.get("engagement_id", ""),
@@ -262,8 +310,7 @@ def _check_v1_line(
             prev_hash=payload["prev_hash"],
             entry_hash=payload["entry_hash"],
         )
-        computed = _hash_entry(entry)
-    except (KeyError, ValueError, TypeError) as exc:
+    except (KeyError, ValueError, TypeError, RecursionError) as exc:
         return _fail(
             index, total, f"line {index}: malformed entry: {exc}", _RC.MALFORMED
         )
@@ -273,15 +320,21 @@ def _check_v1_line(
             index,
             total + 1,
             f"line {index}: prev_hash mismatch "
-            f"(expected {expected_prev[:12]}…, got {str(entry.prev_hash)[:12]}…)",
+            f"(expected {expected_prev[:12]}…, got {_v1_head(entry.prev_hash)}…)",
             _RC.PREV_HASH_MISMATCH,
+        )
+    try:
+        computed = _hash_entry(entry)
+    except (TypeError, ValueError, RecursionError) as exc:
+        return _fail(
+            index, total, f"line {index}: malformed entry: {exc}", _RC.MALFORMED
         )
     if computed != entry.entry_hash:
         return _fail(
             index,
             total + 1,
             f"line {index}: entry_hash mismatch "
-            f"(expected {computed[:12]}…, got {str(entry.entry_hash)[:12]}…)",
+            f"(expected {computed[:12]}…, got {_v1_head(entry.entry_hash)}…)",
             _RC.ENTRY_HASH_MISMATCH,
         )
     return None
@@ -326,6 +379,20 @@ def _v2_field_problem(record: dict[str, Any]) -> str | None:
 def _scan_chain(path: Path) -> _ChainState:
     """Verify every line of *path* (SPEC §14.7 order); never raises on content."""
     data = path.read_bytes()
+    try:
+        return _scan_lines(data)
+    except RecursionError:
+        # Last resort: every step catches its own errors, but a value nested
+        # too deeply for the interpreter must still give a result. SPEC
+        # §14.7: nesting deeper than 64 is MALFORMED.
+        state = _ChainState(
+            result=_fail(None, 0, "value nested too deeply", _RC.MALFORMED),
+            ends_with_newline=not data or data.endswith(b"\n"),
+        )
+        return state
+
+
+def _scan_lines(data: bytes) -> _ChainState:
     state = _ChainState(
         result=AuditVerificationResult(valid=True, total_entries=0),
         ends_with_newline=not data or data.endswith(b"\n"),
@@ -394,8 +461,10 @@ def _scan_chain(path: Path) -> _ChainState:
                 record = _strict_loads(text)
             except _DuplicateKeyError as exc:
                 code, detail, record = _RC.MALFORMED, str(exc), {}
-            except (_StrictJSONError, RecursionError) as exc:
-                # NaN/Infinity are not JSON at all (step 1).
+            except (ValueError, RecursionError) as exc:
+                # Step 1: NaN/Infinity, or bytes that only parsed after the
+                # routing parse's str.strip() (e.g. a leading \x0c or U+00A0,
+                # which are not JSON whitespace).
                 code, detail, record = _RC.INVALID_JSON, str(exc), {}
             if code is None:
                 missing = [k for k in V2_KEYS if k not in record]
@@ -403,12 +472,15 @@ def _scan_chain(path: Path) -> _ChainState:
                 if missing:
                     code, detail = _RC.MALFORMED, f"missing keys {missing}"
                 elif not _is_int(record["v"]) or record["v"] != 2:
-                    code, detail = _RC.UNKNOWN_VERSION, f"v = {record['v']!r}"
+                    code, detail = (
+                        _RC.UNKNOWN_VERSION,
+                        f"v = {_short_repr(record['v'])}",
+                    )
                 elif extra:
                     code, detail = _RC.UNKNOWN_FIELD, f"unknown keys {extra}"
                 elif (field_problem := _v2_field_problem(record)) is not None:
                     code, detail = _RC.MALFORMED, field_problem
-                elif raw != canonicalize(record) or not terminated:
+                elif not _is_canonical(raw, record) or not terminated:
                     code, detail = _RC.MALFORMED, "line is not JCS(record) + \\n"
                 elif not TIMESTAMP_RE.fullmatch(record["timestamp"]):
                     code, detail = _RC.TIMESTAMP_FORMAT, "timestamp format"
@@ -502,7 +574,7 @@ def _verify_checkpoints(
             or not KEY_ID_RE.fullmatch(checkpoint["key_id"])
             or not isinstance(checkpoint["sig"], str)
             or not SIG_RE.fullmatch(checkpoint["sig"])
-            or raw != canonicalize(checkpoint)
+            or not _is_canonical(raw, checkpoint)
             or not terminated
         ):
             return (_RC.CHECKPOINT_MALFORMED, at)
@@ -816,11 +888,18 @@ class AuditLogV2:
         if not isinstance(signature, bytes) or len(signature) != 64:
             raise ValueError("signer must return a 64-byte ed25519 signature")
         checkpoint["sig"] = _b64url(signature)
-        with self.checkpoints_path.open("ab", buffering=0) as fh:
-            view = memoryview(canonicalize(checkpoint) + b"\n")
-            while view:
-                view = view[fh.write(view) :]
-            os.fsync(fh.fileno())
+        line = canonicalize(checkpoint) + b"\n"
+        try:
+            with self.checkpoints_path.open("ab", buffering=0) as fh:
+                view = memoryview(line)
+                while view:
+                    view = view[fh.write(view) :]
+                os.fsync(fh.fileno())
+        except BaseException:
+            # A partial checkpoint line may be on disk; never append after it
+            # (the next open reports it instead).
+            self._release()
+            raise
         self._records_since_checkpoint = 0
         return checkpoint
 

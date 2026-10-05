@@ -145,7 +145,9 @@ class AuditLog:
             for line in fh:
                 if not line.strip():
                     continue
-                payload = json.loads(line)
+                # Strip like the original v1 reader: a v1 chain it accepts
+                # (e.g. a line ending in \x0c) must not crash here.
+                payload = json.loads(line.strip())
                 if isinstance(payload, dict) and "v" in payload:
                     raise AuditIntegrityError(
                         "chain contains v2 records; use AuditLogV2"

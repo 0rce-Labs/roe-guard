@@ -848,12 +848,26 @@ def test_writer_rejects_bad_state_and_arguments(tmp_path, monkeypatch):
         AuditLogV2(path, chain_id="test-chain")
 
 
-def test_writer_refuses_file_ending_mid_line(tmp_path):
+def test_writer_refuses_v2_file_ending_mid_line(tmp_path):
+    # A v2 line without its "\n" is already MALFORMED for the verifier.
     path = tmp_path / "audit.jsonl"
     _write(path, count=1)
     path.write_bytes(path.read_bytes().rstrip(b"\n"))
     size = path.stat().st_size
     with pytest.raises(AuditIntegrityError):
+        AuditLogV2(path, chain_id="test-chain")
+    assert path.stat().st_size == size
+
+
+def test_writer_refuses_v1_file_ending_mid_line(tmp_path):
+    # The v1 rules accept a last line without "\n", but a v2 record appended
+    # to it would be glued onto that line; the writer's own guard refuses.
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    path.write_bytes(path.read_bytes().rstrip(b"\n"))
+    assert verify_chain(path).valid
+    size = path.stat().st_size
+    with pytest.raises(AuditIntegrityError, match="ends mid-line"):
         AuditLogV2(path, chain_id="test-chain")
     assert path.stat().st_size == size
 
@@ -1106,19 +1120,208 @@ def test_empty_checkpoint_file_counts_as_missing(tmp_path):
 
 def test_verify_beside_a_live_writer_is_not_truncation(tmp_path, monkeypatch):
     # A record and its checkpoint land between the verifier's two reads.
-    from roe_guard import audit_v2
-
+    # SPEC §14.7: checkpoints are read first. Reading the chain first would
+    # see the new checkpoint without its record (a false CHAIN_TRUNCATED).
     path = tmp_path / "audit.jsonl"
+    ckpt_path = Path(str(path) + ".checkpoints.jsonl")
     signer = Ed25519Signer(TEST_PRIVATE)
     log = AuditLogV2(path, chain_id="test-chain", signer=signer, checkpoint_every=1)
     log.record(_decision(), engagement_id="audit-eng", policy_sha256=POLICY_SHA)
-    real_scan = audit_v2._scan_chain
+    real_read = Path.read_bytes
+    reads = []
 
-    def scan_after_append(p):
-        log.record(_decision(), engagement_id="audit-eng", policy_sha256=POLICY_SHA)
-        return real_scan(p)
+    def read_then_append(self):
+        data = real_read(self)
+        if self in (path, ckpt_path):
+            reads.append(self)
+            if len(reads) == 1:
+                log.record(
+                    _decision(), engagement_id="audit-eng", policy_sha256=POLICY_SHA
+                )
+        return data
 
-    monkeypatch.setattr(audit_v2, "_scan_chain", scan_after_append)
+    monkeypatch.setattr(Path, "read_bytes", read_then_append)
     result = _verify_with_keys(path)
+    monkeypatch.undo()
     log.close()
+    assert reads == [ckpt_path, path]
     assert result.valid, result.reason
+
+
+# --- second verification pass follow-ups -------------------------------------
+
+
+@pytest.mark.parametrize("where", ["lead", "trail"])
+@pytest.mark.parametrize(
+    "pad", ["\x0b", "\x0c", "\x1c", "\x1f", "\x85", "\xa0", "\u2028", "\u3000"]
+)
+def test_v2_line_with_non_json_padding_is_invalid_json(tmp_path, pad, where):
+    # str.strip() removes these characters but JSON does not allow them as
+    # whitespace: the line is not JSON as written (step 1), never a crash.
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=1)
+    line = path.read_bytes().rstrip(b"\n").decode("utf-8")
+    padded = pad + line if where == "lead" else line + pad
+    path.write_bytes((padded + "\n").encode("utf-8"))
+    result = verify_chain(path)
+    assert (result.valid, result.reason_code) == (False, "INVALID_JSON")
+    with pytest.raises(AuditIntegrityError):
+        AuditLogV2(path, chain_id="test-chain")
+
+
+def test_nan_after_nested_duplicate_key_is_invalid_json(tmp_path):
+    # Step 1 (NaN) wins over step 2 (duplicate key), wherever they sit.
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=1)
+    line = path.read_bytes().rstrip(b"\n").decode("utf-8")
+    assert '"metadata":{"i":0}' in line
+    line = line.replace('"metadata":{"i":0}', '"metadata":{"a":{"k":1,"k":2},"b":NaN}')
+    path.write_bytes((line + "\n").encode("utf-8"))
+    assert verify_chain(path).reason_code == "INVALID_JSON"
+
+
+def test_checkpoint_seq_outside_jcs_range_is_malformed(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=2, signer=Ed25519Signer(TEST_PRIVATE))
+    ckpt = Path(str(path) + ".checkpoints.jsonl")
+    checkpoint = json.loads(ckpt.read_bytes().splitlines()[-1])
+    checkpoint["seq"] = 2**53
+    ckpt.write_text(
+        json.dumps(checkpoint, sort_keys=True, separators=(",", ":")) + "\n"
+    )
+    result = _verify_with_keys(path)
+    assert (result.reason_code, result.broken_at_index) == (
+        "CHECKPOINT_MALFORMED",
+        2**53,
+    )
+    with pytest.raises(AuditIntegrityError):
+        AuditLogV2(path, chain_id="test-chain")
+
+
+def test_checkpoint_line_without_final_newline_is_malformed(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=2, signer=Ed25519Signer(TEST_PRIVATE))
+    ckpt = Path(str(path) + ".checkpoints.jsonl")
+    ckpt.write_bytes(ckpt.read_bytes().rstrip(b"\n"))
+    assert _verify_with_keys(path).reason_code == "CHECKPOINT_MALFORMED"
+
+
+@pytest.mark.parametrize("depth", [100, 500, 900, 990, 2000, 20000])
+@pytest.mark.parametrize("field_name", ["target", "prev_hash", "decision"])
+def test_deep_v1_field_never_crashes(tmp_path, depth, field_name):
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    text = json.dumps(record, sort_keys=True, separators=(",", ":"))
+    old = f'"{field_name}":' + json.dumps(record[field_name])
+    assert old in text
+    deep = "[" * depth + "]" * depth
+    path.write_text(text.replace(old, f'"{field_name}":{deep}') + "\n")
+    result = verify_chain(path)
+    assert result.valid is False
+    # Which code depends on the interpreter's JSON depth limits; never a crash.
+    assert result.reason_code in {
+        "INVALID_JSON",
+        "MALFORMED",
+        "PREV_HASH_MISMATCH",
+        "ENTRY_HASH_MISMATCH",
+    }
+
+
+@pytest.mark.parametrize("depth", [100, 500, 900, 990, 2000, 20000])
+def test_deep_v2_version_never_crashes(tmp_path, depth):
+    path = tmp_path / "audit.jsonl"
+    _write(path, count=1)
+    line = path.read_bytes().rstrip(b"\n").decode("utf-8")
+    deep = "[" * depth + "]" * depth
+    assert line.count('"v":2') == 1
+    path.write_bytes((line.replace('"v":2', '"v":' + deep) + "\n").encode("utf-8"))
+    result = verify_chain(path)
+    assert result.valid is False
+    assert result.reason_code in {"INVALID_JSON", "UNKNOWN_VERSION"}
+
+
+def test_v1_prev_hash_checked_before_hashing(tmp_path):
+    # Original v1 order: a wrong prev_hash is reported even when the line
+    # also holds a string JSON cannot encode (lone surrogate).
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["prev_hash"] = "f" * 64
+    text = json.dumps(record, sort_keys=True, separators=(",", ":"))
+    assert '"reason":"' in text
+    text = text.replace('"reason":"', '"reason":"\\ud800', 1)
+    path.write_text(text + "\n")
+    result = verify_chain(path)
+    assert (result.reason_code, result.total_entries, result.broken_at_index) == (
+        "PREV_HASH_MISMATCH",
+        1,
+        0,
+    )
+    assert result.reason == (
+        "line 0: prev_hash mismatch (expected 000000000000…, got ffffffffffff…)"
+    )
+
+
+def test_v1_list_prev_hash_text_matches_original(tmp_path):
+    # The original wrote prev_hash[:12]; for a list that is the list slice.
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["prev_hash"] = ["a", "b"]
+    path.write_text(json.dumps(record, sort_keys=True) + "\n")
+    result = verify_chain(path)
+    assert result.reason == (
+        "line 0: prev_hash mismatch (expected 000000000000…, got ['a', 'b']…)"
+    )
+
+
+def test_failed_checkpoint_append_closes_the_writer(tmp_path, monkeypatch):
+    path = tmp_path / "audit.jsonl"
+    signer = Ed25519Signer(TEST_PRIVATE)
+    log = AuditLogV2(path, chain_id="test-chain", signer=signer, checkpoint_every=1000)
+    log.record(_decision(), engagement_id="audit-eng", policy_sha256=POLICY_SHA)
+    real_open = Path.open
+
+    class _ShortWriter:
+        def __init__(self, fh):
+            self._fh = fh
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self._fh.close()
+
+        def fileno(self):
+            return self._fh.fileno()
+
+        def write(self, view):
+            self._fh.write(bytes(view[:10]))
+            raise OSError(28, "No space left on device")
+
+    def short_open(self, mode="r", *args, **kwargs):
+        fh = real_open(self, mode, *args, **kwargs)
+        if self.name.endswith(".checkpoints.jsonl"):
+            return _ShortWriter(fh)
+        return fh
+
+    monkeypatch.setattr(Path, "open", short_open)
+    with pytest.raises(OSError):
+        log.checkpoint()
+    monkeypatch.undo()
+    with pytest.raises(roe_guard.exceptions.RoeGuardError):
+        log.record(_decision(), engagement_id="audit-eng", policy_sha256=POLICY_SHA)
+    # The torn checkpoint is reported on the next open, never appended to.
+    with pytest.raises(AuditIntegrityError):
+        AuditLogV2(path, chain_id="test-chain", signer=signer)
+
+
+def test_v1_record_accepts_lines_the_v1_reader_accepts(tmp_path):
+    # _reject_v2_tail strips like the original reader (e.g. a trailing \x0c).
+    path = tmp_path / "audit.jsonl"
+    _v1_record(path, "10.20.3.5")
+    path.write_bytes(path.read_bytes().rstrip(b"\n") + b"\x0c\n")
+    assert AuditLog(path).verify().valid
+    _v1_record(path, "10.20.3.6")
+    assert AuditLog(path).verify().valid
